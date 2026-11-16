@@ -6,6 +6,7 @@
 #include "core/app.h"
 #include "game/progress.h"
 #include "game/recipes.h"
+#include "game/world.h"
 #include "plat_host.h"
 #include "scenes/scenes.h"
 #include "scenes/shop_draw.h"
@@ -29,8 +30,8 @@ static void snap(const char *name)
     host_write_ppm(path);
 }
 
-// Séquence de captures (pour vérifier les animations) : prefix_00, prefix_01…
-static void snap_seq(const char *prefix, int count, int interval)
+// Séquence de captures (pour vérifier les animations) : seq_prefix_00, _01…
+__attribute__((unused)) static void snap_seq(const char *prefix, int count, int interval)
 {
     char name[64];
     for (int i = 0; i < count; i++) {
@@ -81,6 +82,28 @@ static void press(uint32_t keys)
 
 static void center(Rect r, int *x, int *y) { *x = r.x + r.w / 2; *y = r.y + r.h / 2; }
 
+// Parcourt une cinématique : une capture au milieu de chaque plan
+static void play_cutscene(const char *prefix, int shots)
+{
+    char name[64];
+    for (int i = 0; i < shots; i++) {
+        frames(70);
+        snprintf(name, sizeof(name), "%s_%d", prefix, i + 1);
+        snap(name);
+        press(BTN_A);          // termine la phrase
+        frames(2);
+        press(BTN_A);          // plan suivant
+    }
+    frames(30);
+}
+
+// Termine les niveaux jusqu'à `level` (exclu) avec 3 étoiles
+static void unlock_until(int level)
+{
+    for (int l = 1; l < level; l++)
+        progress_record_level(l, 3);
+}
+
 int main(int argc, char **argv)
 {
     g_dir = argc > 1 ? argv[1] : ".";
@@ -91,140 +114,93 @@ int main(int argc, char **argv)
     frames(30);
     snap("01_title");
 
+    // Nouvelle partie -> cinématique d'ouverture -> carte
     press(BTN_START);
-    frames(FPS + 12);
-    snap_seq("arrive", 8, 4);
-    frames(4);
-    snap("02_day1_first_customer");
-
-    // Thé au lait perles : thé noir 70, lait 30, perles x2
-    center(tap_rect(0), &x, &y);
-    touch(x, y);
+    frames(20);
+    play_cutscene("02_intro", 7);
     frames(40);
-    snap("03_pouring");
-    frames(30);
-    release();
-    frames(1);
+    snap("03_map_w1");
+
+    // Niveau 1-1
+    press(BTN_A);
+    frames(FPS + ARRIVE_FRAMES + 30);
+    snap("04_level_1");
+    center(tap_rect(0), &x, &y);
+    hold(x, y, 70);
     center(tap_rect(4), &x, &y);
     hold(x, y, 30);
     center(bin_rect(0), &x, &y);
-    touch(x, y);
-    frames(2);
-    touch(CUP_CX + 30, 130);
-    frames(2);
-    snap("04_dragging_pearl");
-    release();
-    frames(2);
     drag(x, y, CUP_CX, 140);
-    snap("05_assembled");
+    drag(x, y, CUP_CX, 140);
     center(action_rect(ACT_SEAL), &x, &y);
     tap(x, y);
-    snap("06_sealed");
+    frames(30);
+    snap("05_sealed");
     center(action_rect(ACT_SERVE), &x, &y);
     tap(x, y);
-    snap_seq("leave", 10, 4);
-    snap("07_served");
-
-    // On laisse les clients attendre : stress, puis départs fâchés
-    frames(30 * FPS);
-    snap("08_waiting");
-    frames(25 * FPS);
-    snap("09_stress");
+    frames(12);
+    snap("06_served");
     for (int i = 0; i < 200 * FPS && shop_session()->in_progress; i++)
         frames(1);
-    frames(20);
-    snap("10_day_end");
+    frames(100);
+    snap("07_results");
 
-    // Jour suivant (ou réessai), pause, livre de recettes
+    // Retour à la carte : Perle avance
     press(BTN_START);
-    frames(FPS * 3);
-    snap("11_day_next");
-    press(BTN_START);
-    frames(2);
-    snap("12_pause");
-    { Rect r = pause_button_rect(1); tap(r.x + r.w / 2, r.y + r.h / 2); }
-    frames(20);
-    snap("13_book");
-
-    // Retour en boutique, quitter la journée, options
-    press(BTN_B);
-    frames(20);
-    press(BTN_START);
-    { Rect r = pause_button_rect(2); tap(r.x + r.w / 2, r.y + r.h / 2); }
-    frames(20);
-    snap("14_title_with_save");
-    tap(128, 40 + 3 * 32 + 13);           // Options
-    frames(20);
-    tap(186, 30 + 2 * 30 + 12);           // Mode gaucher
-    tap(234, 30 + 0 * 30 + 12);           // Musique +
-    frames(2);
-    snap("15_options");
-    press(BTN_B);
-    frames(20);
-
-    // Mode Rush (débloqué après le jour 1)
-    progress()->day = 2;
-    progress_learn_recipe(1);
-    progress_learn_recipe(2);
-    tap(128, 40 + 2 * 32 + 13);
-    frames(20 * FPS);
-    snap("16_rush_lefty");
-    for (int i = 0; i < 30 * 60 * FPS && shop_session()->in_progress; i++)
-        frames(1);
-    frames(20);
-    snap("17_rush_end");
-
-    // Deux gobelets (amélioration) + habitué du jour 3
-    press(BTN_A);
-    frames(20);
-    progress()->upgrades |= 1u << UPG_SECOND_CUP;
-    progress()->day = 3;
-    press(BTN_START);                       // Continuer
-    frames(16 * FPS + ARRIVE_FRAMES);
-    center(tap_rect(0), &x, &y);
-    hold(x, y, 60);
-    center(bin_rect(0), &x, &y);
-    drag(x, y, cup_cx_of(0, 2), 140);
-    tap(cup_cx_of(1, 2), 150);              // sélectionne le 2e gobelet
-    center(tap_rect(4), &x, &y);
-    hold(x, y, 80);
-    center(pump_rect(1), &x, &y);
-    tap(x, y);
-    frames(4);
-    snap("18_two_cups_special");
-
-    // Séquences d'animation sur le gobelet 1 : versement, garnitures, glaçons, secousse
-    tap(cup_cx_of(0, 2), 150);
-    center(action_rect(ACT_TRASH), &x, &y);
-    tap(x, y);
-    center(tap_rect(0), &x, &y);
-    touch(x, y);
     frames(30);
-    snap_seq("pour", 6, 3);
-    frames(20);
-    release();
-    frames(1);
-    center(bin_rect(3), &x, &y);            // glaçons
-    tap(x, y);
-    tap(x, y);
-    center(bin_rect(0), &x, &y);            // perles
-    tap(x, y);
-    snap_seq("drop", 8, 3);
+    snap("08_map_walk");
     frames(40);
-    snap_seq("float", 6, 6);
-    center(action_rect(ACT_SEAL), &x, &y);
-    tap(x, y);
-    snap_seq("seal", 6, 4);
-    // secousse : va-et-vient sur le gobelet
-    touch(cup_cx_of(0, 2), 130);
-    frames(1);
-    for (int k = 0; k < 8; k++) {
-        touch(cup_cx_of(0, 2) + ((k & 1) ? -10 : 10), 130);
-        frames(3);
+
+    // Journal et livre
+    press(BTN_Y);
+    frames(20);
+    snap("09_journal");
+    press(BTN_B);
+    frames(20);
+    press(BTN_X);
+    frames(30);
+    snap("10_book");
+    press(BTN_B);
+    frames(20);
+
+    // Chaque nouveau bar : cinématique d'arrivée, carte, poste de travail
+    static const char *const NAMES[WORLD_COUNT] = { "quartier", "plage", "montagne", "ville", "foret" };
+    for (int w = 1; w < WORLD_COUNT; w++) {
+        unlock_until(level_id(w, 0));
+        progress()->level = (uint8_t)level_id(w, 0);
+        press(BTN_B);              // menu
+        frames(20);
+        press(BTN_START);          // continuer -> carte -> cinématique d'arrivée
+        frames(30);
+        char name[64];
+        snprintf(name, sizeof(name), "20_world%d_intro", w + 1);
+        play_cutscene(name, 4);
+        frames(40);
+        snprintf(name, sizeof(name), "21_map_%s", NAMES[w]);
+        snap(name);
+        press(BTN_A);              // jouer le premier niveau du bar
+        frames(FPS * 18);
+        center(tap_rect(0), &x, &y);
+        hold(x, y, 40);
+        center(bin_rect(1), &x, &y);
+        tap(x, y);
+        tap(x, y);
+        frames(10);
+        snprintf(name, sizeof(name), "22_shop_%s", NAMES[w]);
+        snap(name);
+        press(BTN_START);          // pause -> quitter vers la carte
+        { Rect r = pause_button_rect(2); tap(r.x + r.w / 2, r.y + r.h / 2); }
+        frames(30);
     }
-    release();
-    frames(1);
-    snap_seq("mix", 6, 5);
+
+    // Cinématique de fin
+    unlock_until(LEVEL_COUNT + 1);
+    cutscene_play(CUT_ENDING, &SCENE_MAP);
+    scene_change(&SCENE_CUTSCENE);
+    frames(20);
+    play_cutscene("30_ending", 7);
+    snap("31_after_ending");
+
     printf("captures écrites dans %s\n", g_dir);
     return 0;
 }

@@ -68,6 +68,6 @@ test: $(HOST_DIR)/test_game
 	./$(HOST_DIR)/test_game
 
 snap: $(HOST_DIR)/snap
-	@mkdir -p build/snap
+	@rm -rf build/snap && mkdir -p build/snap
 	./$(HOST_DIR)/snap build/snap
 	python3 tools/ppm2png.py build/snap

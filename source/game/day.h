@@ -10,6 +10,7 @@
 #include "game/customer.h"
 #include "game/drink.h"
 #include "game/objectives.h"
+#include "game/specials.h"
 
 #define FPS              60
 #define DAY_SLOTS        3
@@ -20,7 +21,8 @@
 #define LEAVE_FRAMES     40
 #define MAX_EVENTS       8
 #define MAX_UNLOCKS      8
-#define SPECIAL_ARRIVAL  (15 * FPS)   // un habitué arrive après 15 s
+#define SPECIAL_ARRIVAL  (15 * FPS)   // le 1er habitué arrive après 15 s
+#define SPECIAL_ARRIVAL2 (60 * FPS)   // le 2e (s'il y en a un) après 1 min
 
 typedef enum {
     CS_EMPTY,
@@ -71,13 +73,16 @@ typedef struct {
 } ServeResult;
 
 typedef struct Day {
-    int number;
+    int number;           // niveau global 1..20
+    int world;            // bar (0..4)
+    int level;            // niveau dans le monde (0..3)
     bool endless;         // mode Rush : pas d'horloge, finit quand l'ambiance tombe à 0
-    Objective objective;  // objectif du jour (OBJ_NONE en mode Rush)
+    Objective objective;  // objectif du niveau (OBJ_NONE en mode Rush)
     bool objective_met;   // calculé en fin de journée
-    int8_t special_today; // habitué attendu aujourd'hui (-1 = aucun)
-    bool special_spawned;
-    int8_t special_result; // -1 pas encore venu, 0 raté, 1 réussi
+    int stars;            // 0..3, calculé en fin de journée
+    int8_t specials[SPECIALS_PER_LEVEL];       // habitués attendus (-1 = aucun)
+    bool special_spawned[SPECIALS_PER_LEVEL];
+    int8_t special_result[SPECIALS_PER_LEVEL]; // -1 pas encore venu, 0 raté, 1 réussi
     uint32_t frame;
     int32_t spawn_timer;
     int ambiance;
@@ -96,9 +101,14 @@ typedef struct Day {
     char hint_buf[48];
 } Day;
 
-void day_start(Day *d, int number, uint32_t seed);
-// Mode Rush (tâche 6.7) : recettes connues uniquement, cadence qui accélère
-void day_start_rush(Day *d, int number, uint32_t seed);
+// Démarre le niveau global `level` (1..20)
+void day_start(Day *d, int level, uint32_t seed);
+// Mode Rush (tâche 6.7) dans le bar du niveau donné : recettes connues, cadence qui accélère
+void day_start_rush(Day *d, int level, uint32_t seed);
+
+// Étoiles d'un niveau terminé : 1 = terminé, 2 = objectif atteint, 3 = aucun client
+// perdu et ambiance ≥ 60 %. 0 si l'ambiance s'est effondrée.
+int day_compute_stars(const Day *d);
 
 // Avance d'une frame. Les événements de la frame sont dans d->events.
 void day_update(Day *d);

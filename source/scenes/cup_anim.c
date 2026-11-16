@@ -10,11 +10,6 @@
 #define LIQUID_PX   (CUP_BOT_Y - CUP_TOP_Y)
 #define SPAWN_Y     (CUP_TOP_Y - 18)
 
-// Nombre d'objets dessinés par cuillerée
-#define PER_PEARL   6
-#define PER_POP     4
-#define PER_JELLY   4
-#define PER_ICE     2
 
 static Rng g_rng = { 0xA5A5F00Du };
 
@@ -41,35 +36,43 @@ int cup_surface_y(const Drink *d, int dy)
 
 #define SPAN (2 * CUP_BOT_HW - 8)
 
-static int pearl_rows(const Drink *d)
+static int style_of(int ing) { return ing_info(ing)->style; }
+
+// Rang d'un objet parmi tous ceux qui partagent le même comportement
+// (les billes et cubes s'empilent ensemble au fond, les flotteurs ensemble en surface)
+static int rank(const Drink *d, int ing, int index)
 {
-    int n = d->qty[ING_PEARLS] * PER_PEARL;
-    return n ? (n * 7) / SPAN + 1 : 0;
+    int style = style_of(ing);
+    bool sinks = style == TOP_SINK_BALL || style == TOP_SINK_CUBE;
+    int k = 0;
+    for (int j = TOPPING_FIRST; j < ing; j++) {
+        int sj = style_of(j);
+        bool same = sinks ? (sj == TOP_SINK_BALL || sj == TOP_SINK_CUBE) : sj == style;
+        if (same)
+            k += d->qty[j] * ing_info(j)->per_scoop;
+    }
+    return k + index;
 }
 
-static void rest_pos(const Drink *d, int type, int k, int *x, int *y)
+static void rest_pos(const Drink *d, int ing, int index, int *x, int *y)
 {
     int bot = CUP_BOT_Y;
-    int base = bot - 4 - pearl_rows(d) * 4;
-    switch (type) {
-    case ITEM_PEARL:
+    int surf = cup_surface_y(d, 0);
+    int k = rank(d, ing, index);
+    switch (style_of(ing)) {
+    case TOP_SINK_BALL:
+    case TOP_SINK_CUBE:
         *x = -CUP_BOT_HW + 5 + (k * 7) % SPAN;
         *y = bot - 3 - ((k * 7) / SPAN) * 4 - (k & 1);
         break;
-    case ITEM_POP:
-        *x = -CUP_BOT_HW + 7 + (k * 11) % (SPAN - 2);
-        *y = base - ((k * 11) / (SPAN - 2)) * 5 - (k % 3);
+    case TOP_FLOAT_FLAT:
+        *x = -20 + (k * 11) % 40;
+        *y = d->liquid_total ? surf - 1 : bot - 3;
         break;
-    case ITEM_JELLY:
-        *x = -CUP_BOT_HW + 6 + (k * 13) % (SPAN - 4);
-        *y = base - 8 - ((k * 13) / (SPAN - 4)) * 6 - (k & 1) * 2;
-        break;
-    default: {  // glaçons : flottent sous la surface, ou au fond sans liquide
-        int surf = cup_surface_y(d, 0);
+    default:   // flotteurs (glaçons, guimauves)
         *x = -18 + (k * 9) % 32;
         *y = d->liquid_total ? surf + 2 + ((k * 9) / 32) * 6 : bot - 8 - ((k * 9) / 32) * 6;
         break;
-    }
     }
 }
 
@@ -86,23 +89,27 @@ static CupItem *add_item(CupAnim *a)
     if (a->count >= CUP_ITEMS) {
         // On recycle une bulle si possible
         for (int i = 0; i < a->count; i++)
-            if (a->items[i].type == ITEM_BUBBLE)
+            if (a->items[i].ing == ITEM_BUBBLE)
                 return &a->items[i];
         return NULL;
     }
     return &a->items[a->count++];
 }
 
-static void spawn_toppings(CupAnim *a, const Drink *d, Ingredient ing, int type, int per)
+static void spawn_toppings(CupAnim *a, const Drink *d, Ingredient ing)
 {
+    const IngredientInfo *info = ing_info(ing);
+    if (info->style == TOP_LAYER || info->style == TOP_NONE)
+        return;
+    int per = info->per_scoop;
     int target = d->qty[ing] * per;
     while (a->spawned[ing] < target) {
         CupItem *it = add_item(a);
         if (!it)
             return;
         int rx, ry;
-        rest_pos(d, type, a->spawned[ing], &rx, &ry);
-        it->type = (uint8_t)type;
+        rest_pos(d, ing, a->spawned[ing], &rx, &ry);
+        it->ing = (uint8_t)ing;
         it->index = a->spawned[ing];
         it->resting = false;
         it->x = (int16_t)(rx + rng_range(&g_rng, 5) - 2);
@@ -121,10 +128,8 @@ void cup_anim_update(CupAnim *a, const Drink *d, bool pouring, int wobble, uint3
         return;
     }
 
-    spawn_toppings(a, d, ING_PEARLS, ITEM_PEARL, PER_PEARL);
-    spawn_toppings(a, d, ING_POPPING, ITEM_POP, PER_POP);
-    spawn_toppings(a, d, ING_JELLY, ITEM_JELLY, PER_JELLY);
-    spawn_toppings(a, d, ING_ICE, ITEM_ICE, PER_ICE);
+    for (int ing = TOPPING_FIRST; ing <= TOPPING_LAST; ing++)
+        spawn_toppings(a, d, ing);
 
     int surf = cup_surface_y(d, 0) * SUB;
     bool has_liquid = d->liquid_total > 2;
@@ -133,7 +138,7 @@ void cup_anim_update(CupAnim *a, const Drink *d, bool pouring, int wobble, uint3
     if (pouring && has_liquid && (frame % 3) == 0) {
         CupItem *b = add_item(a);
         if (b) {
-            b->type = ITEM_BUBBLE;
+            b->ing = ITEM_BUBBLE;
             b->x = (int16_t)(rng_range(&g_rng, 13) - 6);
             int depth = d->liquid_total * LIQUID_PX / CUP_CAPACITY;
             b->y = surf + (2 + rng_range(&g_rng, depth > 4 ? depth - 2 : 2)) * SUB;
@@ -161,7 +166,7 @@ void cup_anim_update(CupAnim *a, const Drink *d, bool pouring, int wobble, uint3
     for (int i = 0; i < a->count; i++) {
         CupItem *it = &a->items[i];
         int rx, ry;
-        if (it->type == ITEM_BUBBLE) {
+        if (it->ing == ITEM_BUBBLE) {
             it->y += it->vy;
             it->x += (frame + i) & 4 ? 0 : (i & 1 ? 1 : -1) * ((frame & 7) == 0);
             if (--it->life == 0 || it->y <= surf)
@@ -169,11 +174,12 @@ void cup_anim_update(CupAnim *a, const Drink *d, bool pouring, int wobble, uint3
             a->items[n++] = *it;
             continue;
         }
-        rest_pos(d, it->type, it->index, &rx, &ry);
+        rest_pos(d, it->ing, it->index, &rx, &ry);
         int rest = ry * SUB;
         bool in_liquid = has_liquid && it->y > surf;
+        int style = style_of(it->ing);
 
-        if (it->type == ITEM_ICE && has_liquid) {
+        if ((style == TOP_FLOAT_CUBE || style == TOP_FLOAT_FLAT) && has_liquid) {
             // Flotte : rejoint doucement sa ligne de flottaison et y danse
             int bob = sin64((int)(frame * 2 + it->index * 23)) / 40;
             int target = rest + bob * SUB;
@@ -186,7 +192,7 @@ void cup_anim_update(CupAnim *a, const Drink *d, bool pouring, int wobble, uint3
                 it->vy = (int16_t)(it->vy * 3 / 4 + (target - it->y) / 6);
                 it->y += it->vy;
             }
-            int drift = sin64((int)(frame / 2 + it->index * 17)) / 22;
+            int drift = sin64((int)(frame / 2 + it->index * 17)) / (style == TOP_FLOAT_FLAT ? 12 : 22);
             it->x = (int16_t)(rx + drift);
         } else if (!it->resting) {
             if (in_liquid) {
@@ -200,7 +206,7 @@ void cup_anim_update(CupAnim *a, const Drink *d, bool pouring, int wobble, uint3
             it->y += it->vy;
             if (it->y >= rest) {
                 it->y = rest;
-                if (it->type == ITEM_POP && it->vy > 10) {
+                if (it->ing == ING_POPPING && it->vy > 10) {
                     it->vy = (int16_t)(-it->vy / 2);   // rebondit
                 } else {
                     it->resting = true;
@@ -364,58 +370,109 @@ void draw_cup(Surface *s, int cx, int dy, const Drink *d, const CupAnim *a, uint
         }
     }
 
-    // Garnitures animées (ou positions de repos sans état d'animation)
+    // Garnitures animées
     if (a) {
         for (int i = 0; i < a->count; i++) {
             const CupItem *it = &a->items[i];
             int x = cx + it->x, y = it->y / SUB + dy;
-            // Tourbillon juste après avoir secoué
-            if (d->shaken && a->mix < 32 && it->type != ITEM_BUBBLE)
-                x += sin64((int)frame * 4 + it->index * 9) * (32 - a->mix) / (64 * 4);
-            switch (it->type) {
-            case ITEM_PEARL:
-                draw_disc(s, x, y, 2, RGB888(74, 44, 42));
-                draw_pixel(s, x - 1, y - 1, RGB888(160, 120, 110));
-                break;
-            case ITEM_POP:
-                draw_disc(s, x, y, 2, RGB888(255, 160, 70));
-                draw_pixel(s, x - 1, y - 1, COL_WHITE);
-                break;
-            case ITEM_JELLY: {
-                // Gelée qui tremblote
-                bool squish = ((frame / 10) + it->index) & 1;
-                draw_rect(s, x, y + squish, squish ? 5 : 4, squish ? 3 : 4, RGB888(150, 220, 120));
-                draw_pixel(s, x, y + squish, COL_WHITE);
-                break;
-            }
-            case ITEM_ICE: {
-                uint16_t under = d->liquid_total ? top_color : COL_GLASS;
-                uint16_t body = color_mix(under, COL_WHITE, 170);
-                draw_rect(s, x, y, 7, 6, body);
-                draw_rect_outline(s, x, y, 7, 6, color_mix(body, RGB888(120, 170, 220), 140));
-                draw_hline(s, x + 1, y + 1, 2, COL_WHITE);
-                draw_pixel(s, x + 1, y + 2, COL_WHITE);
-                break;
-            }
-            case ITEM_BUBBLE:
+            if (it->ing == ITEM_BUBBLE) {
                 draw_pixel(s, x, y, color_mix(top_color, COL_WHITE, 200));
                 if (it->life & 8)
                     draw_pixel(s, x + 1, y, color_mix(top_color, COL_WHITE, 140));
+                continue;
+            }
+            // Tourbillon juste après avoir secoué
+            if (d->shaken && a->mix < 32)
+                x += sin64((int)frame * 4 + it->index * 9) * (32 - a->mix) / (64 * 4);
+            const IngredientInfo *info = ing_info(it->ing);
+            uint16_t col = info->color;
+            uint16_t light = color_mix(col, COL_WHITE, 150);
+            switch (info->style) {
+            case TOP_SINK_BALL:
+                draw_disc(s, x, y, 2, col);
+                draw_pixel(s, x - 1, y - 1, it->ing == ING_PEARLS ? RGB888(160, 120, 110) : COL_WHITE);
+                break;
+            case TOP_SINK_CUBE: {
+                // Tremblote ; la gelée fluo clignote doucement
+                bool squish = ((frame / 10) + it->index) & 1;
+                if (it->ing == ING_GLOW_JELLY && ((frame / 6 + it->index) & 3) == 0)
+                    col = light;
+                if (it->ing == ING_PUDDING) {
+                    draw_rect(s, x - 1, y - 1 + squish, 6, 4, col);
+                    draw_hline(s, x - 1, y - 1 + squish, 6, RGB888(170, 100, 50));
+                } else {
+                    draw_rect(s, x, y + squish, squish ? 5 : 4, squish ? 3 : 4, col);
+                }
+                draw_pixel(s, x, y + squish, COL_WHITE);
+                break;
+            }
+            case TOP_FLOAT_CUBE: {
+                if (it->ing == ING_ICE) {
+                    uint16_t under = d->liquid_total ? top_color : COL_GLASS;
+                    uint16_t body = color_mix(under, COL_WHITE, 170);
+                    draw_rect(s, x, y, 7, 6, body);
+                    draw_rect_outline(s, x, y, 7, 6, color_mix(body, RGB888(120, 170, 220), 140));
+                    draw_hline(s, x + 1, y + 1, 2, COL_WHITE);
+                    draw_pixel(s, x + 1, y + 2, COL_WHITE);
+                } else {   // guimauves : petits cylindres moelleux
+                    draw_rect(s, x, y, 6, 5, col);
+                    draw_hline(s, x, y, 6, COL_WHITE);
+                    draw_vline(s, x + 5, y + 1, 4, color_darken(col, 4));
+                }
+                break;
+            }
+            case TOP_FLOAT_FLAT: {
+                // Pétales qui tournent doucement en dérivant
+                int r = ((frame / 12) + it->index) & 3;
+                draw_hline(s, x, y, r & 1 ? 2 : 3, col);
+                draw_hline(s, x + (r >> 1), y - 1, 2, light);
+                break;
+            }
+            default:
                 break;
             }
         }
     }
 
+    // Crèmes : petit nuage qui suit les vagues (couleur de la crème choisie)
+    int cream_ing = 0, cream_qty = 0;
+    for (int i = TOPPING_FIRST; i <= TOPPING_LAST; i++)
+        if (ing_info(i)->style == TOP_LAYER && d->qty[i]) {
+            cream_ing = i;
+            cream_qty += d->qty[i];
+        }
     // Crème : petit nuage qui suit les vagues
-    if (d->qty[ING_CREAM]) {
+    if (cream_qty) {
+        uint16_t cream = ing_info(cream_ing)->color;
         int cy = (d->liquid_total ? surface : inner_bot) - 1;
         int hw = halfwidth(cy, rim, bottom) - 3;
-        int thick = 2 + d->qty[ING_CREAM] * 2;
+        int thick = 2 + cream_qty * 2;
         for (int k = -hw; k <= hw; k += 5) {
             int wave = (sin64(k * 5 + (int)frame * 3) * slosh) / (64 * SUB);
-            draw_disc(s, cx + k, cy - thick / 2 + wave, thick / 2 + 1, RGB888(255, 252, 240));
+            draw_disc(s, cx + k, cy - thick / 2 + wave, thick / 2 + 1, cream);
         }
         draw_pixel(s, cx - hw / 2, cy - thick, COL_WHITE);
+        if (cream_ing == ING_SEA_CREAM)   // grains de sel
+            for (int k = -hw + 2; k < hw; k += 7)
+                draw_pixel(s, cx + k, cy - thick / 2 - 1, COL_WHITE);
+    }
+
+    // Vapeur au-dessus des boissons chaudes
+    bool hot = false;
+    for (int i = LIQUID_FIRST; i <= LIQUID_LAST; i++)
+        hot |= d->qty[i] && ing_info(i)->hot;
+    if (hot && a) {
+        uint16_t steam = RGB888(240, 236, 244);
+        for (int k = 0; k < 3; k++) {
+            int base = cx - 10 + k * 10;
+            for (int j = 0; j < 12; j++) {
+                int t = (int)frame + k * 20;
+                int yy = rim - 4 - ((j * 2 + t / 2) % 24);
+                int xx = base + sin64(yy * 6 + t * 2) / 32;
+                if ((j + k) % 3 != 0)
+                    draw_pixel(s, xx, yy, steam);
+            }
+        }
     }
 
     // Bords du verre, reflet, graduations

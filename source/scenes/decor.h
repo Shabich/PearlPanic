@@ -7,6 +7,9 @@
 
 #include "gfx/canvas.h"
 
+// Bar dont on dessine le décor (0..4) : vue par les fenêtres, guirlande, plantes
+void decor_set_world(int world);
+
 // Boutique (écran du haut) : à dessiner en premier dans la couche dynamique
 void decor_shop_draw(Surface *s, uint32_t frame);
 // Marque les zones du décor qui changent à cette frame

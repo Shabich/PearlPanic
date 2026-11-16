@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from art import backgrounds, customers, equipment  # noqa: E402
+from art import backgrounds, customers, equipment, heroine, interiors, maps  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 GFX = ROOT / "gfx"
@@ -91,6 +91,57 @@ def icon_coin():
     return img
 
 
+def icon_nata():
+    img, d = new16()
+    for x, y in ((1, 8), (8, 8), (4, 2)):
+        d.rectangle((x, y, x + 6, y + 6), fill=(244, 248, 238, 255), outline=(190, 200, 180, 255))
+        d.point((x + 2, y + 2), fill=WHITE)
+    return img
+
+
+def icon_sea_cream():
+    img, d = new16()
+    for box in ((1, 6, 9, 14), (6, 5, 15, 14), (4, 1, 12, 9)):
+        d.ellipse(box, fill=(226, 242, 248, 255), outline=(150, 190, 214, 255))
+    d.ellipse((5, 5, 12, 12), fill=(226, 242, 248, 255))
+    for x, y in ((6, 4), (10, 7), (4, 9)):
+        d.point((x, y), fill=WHITE)
+    return img
+
+
+def icon_marshmallow():
+    img, d = new16()
+    for x, y, col in ((1, 8, (255, 214, 226)), (8, 7, (255, 255, 255)), (4, 1, (255, 214, 226))):
+        d.rounded_rectangle((x, y, x + 6, y + 6), radius=2, fill=(*col, 255), outline=(220, 160, 180, 255))
+        d.line((x + 1, y + 1, x + 4, y + 1), fill=WHITE)
+    return img
+
+
+def icon_pudding():
+    img, d = new16()
+    d.polygon([(3, 5), (12, 5), (14, 14), (1, 14)], fill=(250, 210, 110, 255), outline=(200, 150, 60, 255))
+    d.rectangle((3, 3, 12, 6), fill=(170, 100, 50, 255))
+    d.line((4, 8, 4, 12), fill=(255, 236, 170, 255))
+    return img
+
+
+def icon_glow():
+    img, d = new16()
+    for x, y in ((1, 8), (8, 7), (4, 1)):
+        d.rectangle((x - 1, y - 1, x + 7, y + 7), fill=(200, 255, 220, 140))
+        d.rectangle((x, y, x + 6, y + 6), fill=(120, 255, 170, 255), outline=(60, 200, 120, 255))
+        d.point((x + 2, y + 2), fill=WHITE)
+    return img
+
+
+def icon_petals():
+    img, d = new16()
+    for cx, cy in ((5, 5), (11, 6), (7, 11)):
+        d.ellipse((cx - 3, cy - 2, cx + 3, cy + 2), fill=(255, 170, 196, 255), outline=(220, 110, 150, 255))
+        d.point((cx - 1, cy - 1), fill=WHITE)
+    return img
+
+
 def rom_icon():
     img = Image.new("RGB", (32, 32), (178, 230, 206))
     d = ImageDraw.Draw(img)
@@ -112,9 +163,14 @@ if __name__ == "__main__":
     customers.generate(save)
     backgrounds.generate(save)
     equipment.generate(save)
+    heroine.generate(save)
+    maps.generate(save)
+    interiors.generate(save)
     for name, fn in (("pearl", icon_pearl), ("popping", icon_popping), ("jelly", icon_jelly),
                      ("cream", icon_cream), ("ice", icon_ice), ("lock", icon_lock),
-                     ("heart", icon_heart), ("coin", icon_coin)):
+                     ("heart", icon_heart), ("coin", icon_coin), ("nata", icon_nata),
+                     ("sea_cream", icon_sea_cream), ("marshmallow", icon_marshmallow),
+                     ("pudding", icon_pudding), ("glow", icon_glow), ("petals", icon_petals)):
         save(fn(), f"icons/{name}.png")
     rom_icon()
     print("assets generated in gfx/")

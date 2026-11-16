@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include "game/ingredients.h"
+#include "game/world.h"
 #include "gfx/canvas.h"
 
 // ---------------------------------------------------------------- Écran bas
@@ -46,17 +47,12 @@
 #define CUP_TOP_HW 28        // demi-largeur en haut
 #define CUP_BOT_HW 22        // demi-largeur en bas
 
-static const Ingredient TAP_INGS[TAP_COUNT] = {
-    ING_TEA_BLACK, ING_TEA_GREEN, ING_TEA_JASMINE, ING_TEA_MATCHA, ING_MILK, ING_MILK_OAT,
-};
-static const Ingredient PUMP_INGS[PUMP_COUNT] = {
-    ING_SYRUP_BROWN, ING_SYRUP_TARO, ING_SYRUP_STRAWBERRY, ING_SYRUP_MANGO,
-};
-// Bacs : 4 à gauche + la crème en haut à droite
+// Ingrédients du poste : ceux du bar en cours (cf. game/world.c)
+extern int g_station_world;
 #define BIN_COUNT 5
-static const Ingredient BIN_INGS[BIN_COUNT] = {
-    ING_PEARLS, ING_POPPING, ING_JELLY, ING_ICE, ING_CREAM,
-};
+static inline Ingredient TAP_ING(int i) { return WORLDS[g_station_world].taps[i].ing; }
+static inline Ingredient PUMP_ING(int i) { return WORLDS[g_station_world].pumps[i].ing; }
+static inline Ingredient BIN_ING(int i) { return WORLDS[g_station_world].bins[i].ing; }
 
 // Mode gaucher (tâche 8.5) : colonnes gauche/droite inversées
 extern bool g_layout_lefty;

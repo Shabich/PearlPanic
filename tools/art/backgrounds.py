@@ -266,7 +266,149 @@ def title_top():
     return c
 
 
+def ground(c, y0, tones):
+    for y in range(y0, H):
+        c.hline(0, W - 1, y, tones[0] if (y - y0) < 3 else tones[1])
+    c.hline(0, W - 1, y0, tones[2])
+
+
+def ext_plage():
+    """Paillote sur la plage."""
+    c = Canvas(W, H)
+    for y in range(H):
+        c.hline(0, W - 1, y, SKY[1] if y < 60 else SKY[0] if y < 96 else (250, 236, 196))
+    c.rect(0, 96, W - 1, 112, SKY[2])                    # mer
+    for x in range(0, W, 3):
+        c.set(x, 112 + (x // 9) % 2, WHITE)
+    rnd = random.Random(7)
+    for _ in range(90):
+        c.set(rnd.randrange(W), rnd.randrange(116, H), (236, 214, 166))
+    fill(c, Mask(W, H).ellipse(40, 30, 14, 14), (255, 240, 170))    # soleil
+    # Paillote : poteaux, comptoir, toit de paille
+    for x in (60, 196):
+        c.rect(x, 110, x + 4, 176, WOOD[2])
+    c.rect(56, 140, 204, 176, WOOD[1])
+    for x in range(58, 204, 8):
+        c.vline(x, 141, 175, WOOD[2])
+    c.hline(56, 204, 140, WOOD[0])
+    roof = Mask(W, H).polygon([(40, 112), (128, 70), (216, 112)])
+    shade(c, roof, ramp((240, 200, 110)))
+    for x in range(42, 216, 4):                           # franges de paille
+        c.vline(x, 110, 114 + (x // 4) % 3, (214, 170, 80))
+    c.rect(96, 92, 160, 104, PINK[1])                     # enseigne
+    c.hline(100, 156, 98, WHITE)
+    # Palmier
+    c.rect(226, 100, 229, 176, WOOD[3])
+    import math
+    for k in range(6):
+        ang = -3.0 + k * 0.55
+        leaf = Mask(W, H).ellipse(228 + math.cos(ang) * 12, 98 + math.sin(ang) * 5, 12, 3)
+        shade(c, leaf, LEAF)
+    # Planche de surf
+    fill(c, Mask(W, H).ellipse(24, 150, 6, 22), PINK[1], outline=PINK[3])
+    c.vline(24, 132, 168, WHITE)
+    return c
+
+
+def ext_montagne():
+    """Chalet enneigé."""
+    c = Canvas(W, H, (*SKY[0], 255))
+    for (x, h, w) in ((30, 80, 70), (220, 90, 80)):
+        mt = Mask(W, H).polygon([(x - w, 120), (x, 120 - h), (x + w, 120)])
+        shade(c, mt, ramp((180, 186, 220)))
+        fill(c, Mask(W, H).polygon([(x - w // 4, 120 - h * 3 // 4), (x, 120 - h), (x + w // 4, 120 - h * 3 // 4)]), WHITE)
+    ground(c, 176, [(250, 252, 255), (236, 240, 252), (200, 210, 236)])
+    c.rect(0, 120, W - 1, 175, (244, 246, 255))
+    # Chalet
+    c.rect(64, 110, 192, 176, WOOD[1])
+    for y in range(112, 176, 6):
+        c.hline(64, 192, y, WOOD[2])
+    roof = Mask(W, H).polygon([(52, 112), (128, 62), (204, 112)])
+    shade(c, roof, ramp((150, 90, 80)))
+    fill(c, Mask(W, H).polygon([(56, 110), (128, 64), (200, 110), (196, 112), (128, 70), (60, 112)]), WHITE)
+    c.rect(170, 70, 180, 92, (150, 110, 100))            # cheminée
+    c.rect(168, 68, 182, 72, WHITE)
+    for (x, y) in ((80, 126), (160, 126)):               # fenêtres éclairées
+        fill(c, Mask(W, H).round_rect(x - 10, y, x + 10, y + 18, 3), (255, 226, 150), outline=WOOD[3])
+        c.vline(x, y, y + 18, WOOD[3])
+    fill(c, Mask(W, H).round_rect(112, 128, 144, 176, 6), WOOD[3])
+    c.set(140, 152, YELLOW[2])
+    c.rect(100, 94, 156, 104, PINK[1])                   # enseigne
+    c.hline(104, 152, 99, WHITE)
+    for x in (24, 236):
+        from .texture import pine
+        pine(c, x, 140, snow=True)
+    return c
+
+
+def ext_ville():
+    """Kiosque néon, la nuit."""
+    c = Canvas(W, H, (40, 36, 80, 255))
+    rnd = random.Random(9)
+    for _ in range(50):
+        c.set(rnd.randrange(W), rnd.randrange(80), (250, 240, 200))
+    x = 0
+    while x < W:
+        w = rnd.randint(20, 36)
+        h = rnd.randint(50, 110)
+        c.rect(x, 176 - h, x + w, 176, rnd.choice([(70, 60, 120), (60, 70, 130), (90, 70, 140)]))
+        for wy in range(176 - h + 4, 170, 8):
+            for wx in range(x + 3, x + w - 3, 6):
+                if rnd.random() < 0.5:
+                    c.rect(wx, wy, wx + 2, wy + 3, rnd.choice([(255, 230, 140), (255, 180, 220), (140, 240, 255)]))
+        x += w + 2
+    ground(c, 176, [(90, 86, 120), (70, 66, 100), (120, 116, 150)])
+    # Kiosque : comptoir, toit, cadre néon
+    c.rect(72, 108, 184, 176, (60, 52, 90))
+    c.rect(78, 140, 178, 176, (90, 80, 130))
+    c.rect(66, 96, 190, 108, (120, 90, 170))
+    for k in range(0, 124, 4):
+        c.rect(66 + k, 108, 67 + k, 112, (255, 120, 200) if k % 8 else (120, 240, 255))
+    for (x0, y0, x1, y1, col) in ((70, 94, 186, 95, (255, 120, 200)), (70, 94, 71, 176, (120, 240, 255)),
+                                  (185, 94, 186, 176, (120, 240, 255))):
+        c.rect(x0, y0, x1, y1, col)
+    c.rect(100, 76, 156, 90, (30, 26, 60))               # enseigne
+    c.rect(102, 78, 154, 88, (255, 120, 200))
+    c.hline(106, 150, 83, WHITE)
+    c.rect(20, 120, 22, 176, GREY[3])                    # lampadaire
+    fill(c, Mask(W, H).ellipse(21, 118, 5, 3), (255, 240, 180))
+    return c
+
+
+def ext_foret():
+    """L'Arbre aux Thés."""
+    c = Canvas(W, H, (*ramp(LEAF[1])[1], 255))
+    rnd = random.Random(11)
+    for _ in range(260):
+        c.set(rnd.randrange(W), rnd.randrange(H), LEAF[2])
+    ground(c, 176, [(150, 200, 110), (120, 170, 90), (90, 140, 80)])
+    # Tronc géant avec porte ronde
+    trunk = Mask(W, H).round_rect(76, 70, 180, 176, 18)
+    shade(c, trunk, ramp((150, 110, 80)))
+    for x in range(84, 176, 9):
+        c.vline(x, 80, 172, (120, 84, 64))
+    canopy = Mask(W, H).ellipse(128, 44, 110, 44)
+    shade(c, canopy, [LEAF[0], LEAF[1], LEAF[2], LEAF[3]])
+    fill(c, Mask(W, H).round_rect(110, 128, 146, 176, 16), WOOD[3])
+    fill(c, Mask(W, H).ellipse(128, 104, 10, 10), (255, 236, 160), outline=(120, 84, 64))
+    c.rect(100, 82, 156, 92, PINK[1])                    # enseigne
+    c.hline(104, 152, 87, WHITE)
+    for (x, y) in ((40, 166), (220, 168), (60, 170)):    # champignons
+        fill(c, Mask(W, H).ellipse(x, y, 8, 5), (236, 80, 90))
+        c.rect(x - 2, y + 3, x + 2, y + 9, CREAM[0])
+        c.set(x - 3, y - 1, WHITE); c.set(x + 3, y, WHITE)
+    for k in range(6):                                   # lanternes
+        x = 30 + k * 40
+        c.vline(x, 0, 18 + (k % 2) * 6, INK)
+        fill(c, Mask(W, H).ellipse(x, 22 + (k % 2) * 6, 3, 4), (255, 236, 150), outline=YELLOW[3])
+    return c
+
+
 def generate(save):
     save(title_top().img, "bg/title.png")
+    save(ext_plage().img, "bg/ext_plage.png")
+    save(ext_montagne().img, "bg/ext_montagne.png")
+    save(ext_ville().img, "bg/ext_ville.png")
+    save(ext_foret().img, "bg/ext_foret.png")
     save(shop_top().img, "bg/shop_top.png")
     save(station_bottom().img, "bg/station.png")

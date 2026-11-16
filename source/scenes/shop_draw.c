@@ -19,6 +19,7 @@
 #include "scenes/ui.h"
 
 static const ShopView *V;
+int g_station_world;
 #define BUBBLE_POP 10
 bool g_layout_lefty;
 
@@ -32,42 +33,187 @@ static bool visible(const Surface *s, Rect r)
 const Image *customer_image_ex(int type, int mood, int pose)
 {
     // [espèce][humeur][pose] : pose 0 = normal, 1 = yeux fermés, 2 = parle
+    // Ordre identique à CustomerTypeId (et à ORDER dans tools/art/customers.py)
     static const Image *const IMGS[CT_COUNT][STRESS_LEVELS][CUSTOMER_POSES] = {
-        [CT_LAPIN] = {
+        {
             { &IMG_customers_lapin_0, &IMG_customers_lapin_0b, &IMG_customers_lapin_0t },
             { &IMG_customers_lapin_1, &IMG_customers_lapin_1b, &IMG_customers_lapin_1t },
             { &IMG_customers_lapin_2, &IMG_customers_lapin_2b, &IMG_customers_lapin_2t },
             { &IMG_customers_lapin_3, &IMG_customers_lapin_3b, &IMG_customers_lapin_3t },
         },
-        [CT_CHAT] = {
+        {
             { &IMG_customers_chat_0, &IMG_customers_chat_0b, &IMG_customers_chat_0t },
             { &IMG_customers_chat_1, &IMG_customers_chat_1b, &IMG_customers_chat_1t },
             { &IMG_customers_chat_2, &IMG_customers_chat_2b, &IMG_customers_chat_2t },
             { &IMG_customers_chat_3, &IMG_customers_chat_3b, &IMG_customers_chat_3t },
         },
-        [CT_OURS] = {
+        {
             { &IMG_customers_ours_0, &IMG_customers_ours_0b, &IMG_customers_ours_0t },
             { &IMG_customers_ours_1, &IMG_customers_ours_1b, &IMG_customers_ours_1t },
             { &IMG_customers_ours_2, &IMG_customers_ours_2b, &IMG_customers_ours_2t },
             { &IMG_customers_ours_3, &IMG_customers_ours_3b, &IMG_customers_ours_3t },
         },
-        [CT_GRENOUILLE] = {
+        {
             { &IMG_customers_grenouille_0, &IMG_customers_grenouille_0b, &IMG_customers_grenouille_0t },
             { &IMG_customers_grenouille_1, &IMG_customers_grenouille_1b, &IMG_customers_grenouille_1t },
             { &IMG_customers_grenouille_2, &IMG_customers_grenouille_2b, &IMG_customers_grenouille_2t },
             { &IMG_customers_grenouille_3, &IMG_customers_grenouille_3b, &IMG_customers_grenouille_3t },
         },
-        [CT_POUSSIN] = {
+        {
             { &IMG_customers_poussin_0, &IMG_customers_poussin_0b, &IMG_customers_poussin_0t },
             { &IMG_customers_poussin_1, &IMG_customers_poussin_1b, &IMG_customers_poussin_1t },
             { &IMG_customers_poussin_2, &IMG_customers_poussin_2b, &IMG_customers_poussin_2t },
             { &IMG_customers_poussin_3, &IMG_customers_poussin_3b, &IMG_customers_poussin_3t },
         },
-        [CT_PANDA] = {
+        {
             { &IMG_customers_panda_0, &IMG_customers_panda_0b, &IMG_customers_panda_0t },
             { &IMG_customers_panda_1, &IMG_customers_panda_1b, &IMG_customers_panda_1t },
             { &IMG_customers_panda_2, &IMG_customers_panda_2b, &IMG_customers_panda_2t },
             { &IMG_customers_panda_3, &IMG_customers_panda_3b, &IMG_customers_panda_3t },
+        },
+        {
+            { &IMG_customers_phoque_0, &IMG_customers_phoque_0b, &IMG_customers_phoque_0t },
+            { &IMG_customers_phoque_1, &IMG_customers_phoque_1b, &IMG_customers_phoque_1t },
+            { &IMG_customers_phoque_2, &IMG_customers_phoque_2b, &IMG_customers_phoque_2t },
+            { &IMG_customers_phoque_3, &IMG_customers_phoque_3b, &IMG_customers_phoque_3t },
+        },
+        {
+            { &IMG_customers_crabe_0, &IMG_customers_crabe_0b, &IMG_customers_crabe_0t },
+            { &IMG_customers_crabe_1, &IMG_customers_crabe_1b, &IMG_customers_crabe_1t },
+            { &IMG_customers_crabe_2, &IMG_customers_crabe_2b, &IMG_customers_crabe_2t },
+            { &IMG_customers_crabe_3, &IMG_customers_crabe_3b, &IMG_customers_crabe_3t },
+        },
+        {
+            { &IMG_customers_pingouin_0, &IMG_customers_pingouin_0b, &IMG_customers_pingouin_0t },
+            { &IMG_customers_pingouin_1, &IMG_customers_pingouin_1b, &IMG_customers_pingouin_1t },
+            { &IMG_customers_pingouin_2, &IMG_customers_pingouin_2b, &IMG_customers_pingouin_2t },
+            { &IMG_customers_pingouin_3, &IMG_customers_pingouin_3b, &IMG_customers_pingouin_3t },
+        },
+        {
+            { &IMG_customers_poulpe_0, &IMG_customers_poulpe_0b, &IMG_customers_poulpe_0t },
+            { &IMG_customers_poulpe_1, &IMG_customers_poulpe_1b, &IMG_customers_poulpe_1t },
+            { &IMG_customers_poulpe_2, &IMG_customers_poulpe_2b, &IMG_customers_poulpe_2t },
+            { &IMG_customers_poulpe_3, &IMG_customers_poulpe_3b, &IMG_customers_poulpe_3t },
+        },
+        {
+            { &IMG_customers_tortue_0, &IMG_customers_tortue_0b, &IMG_customers_tortue_0t },
+            { &IMG_customers_tortue_1, &IMG_customers_tortue_1b, &IMG_customers_tortue_1t },
+            { &IMG_customers_tortue_2, &IMG_customers_tortue_2b, &IMG_customers_tortue_2t },
+            { &IMG_customers_tortue_3, &IMG_customers_tortue_3b, &IMG_customers_tortue_3t },
+        },
+        {
+            { &IMG_customers_dauphin_0, &IMG_customers_dauphin_0b, &IMG_customers_dauphin_0t },
+            { &IMG_customers_dauphin_1, &IMG_customers_dauphin_1b, &IMG_customers_dauphin_1t },
+            { &IMG_customers_dauphin_2, &IMG_customers_dauphin_2b, &IMG_customers_dauphin_2t },
+            { &IMG_customers_dauphin_3, &IMG_customers_dauphin_3b, &IMG_customers_dauphin_3t },
+        },
+        {
+            { &IMG_customers_renard_0, &IMG_customers_renard_0b, &IMG_customers_renard_0t },
+            { &IMG_customers_renard_1, &IMG_customers_renard_1b, &IMG_customers_renard_1t },
+            { &IMG_customers_renard_2, &IMG_customers_renard_2b, &IMG_customers_renard_2t },
+            { &IMG_customers_renard_3, &IMG_customers_renard_3b, &IMG_customers_renard_3t },
+        },
+        {
+            { &IMG_customers_hibou_0, &IMG_customers_hibou_0b, &IMG_customers_hibou_0t },
+            { &IMG_customers_hibou_1, &IMG_customers_hibou_1b, &IMG_customers_hibou_1t },
+            { &IMG_customers_hibou_2, &IMG_customers_hibou_2b, &IMG_customers_hibou_2t },
+            { &IMG_customers_hibou_3, &IMG_customers_hibou_3b, &IMG_customers_hibou_3t },
+        },
+        {
+            { &IMG_customers_ecureuil_0, &IMG_customers_ecureuil_0b, &IMG_customers_ecureuil_0t },
+            { &IMG_customers_ecureuil_1, &IMG_customers_ecureuil_1b, &IMG_customers_ecureuil_1t },
+            { &IMG_customers_ecureuil_2, &IMG_customers_ecureuil_2b, &IMG_customers_ecureuil_2t },
+            { &IMG_customers_ecureuil_3, &IMG_customers_ecureuil_3b, &IMG_customers_ecureuil_3t },
+        },
+        {
+            { &IMG_customers_marmotte_0, &IMG_customers_marmotte_0b, &IMG_customers_marmotte_0t },
+            { &IMG_customers_marmotte_1, &IMG_customers_marmotte_1b, &IMG_customers_marmotte_1t },
+            { &IMG_customers_marmotte_2, &IMG_customers_marmotte_2b, &IMG_customers_marmotte_2t },
+            { &IMG_customers_marmotte_3, &IMG_customers_marmotte_3b, &IMG_customers_marmotte_3t },
+        },
+        {
+            { &IMG_customers_biche_0, &IMG_customers_biche_0b, &IMG_customers_biche_0t },
+            { &IMG_customers_biche_1, &IMG_customers_biche_1b, &IMG_customers_biche_1t },
+            { &IMG_customers_biche_2, &IMG_customers_biche_2b, &IMG_customers_biche_2t },
+            { &IMG_customers_biche_3, &IMG_customers_biche_3b, &IMG_customers_biche_3t },
+        },
+        {
+            { &IMG_customers_yeti_0, &IMG_customers_yeti_0b, &IMG_customers_yeti_0t },
+            { &IMG_customers_yeti_1, &IMG_customers_yeti_1b, &IMG_customers_yeti_1t },
+            { &IMG_customers_yeti_2, &IMG_customers_yeti_2b, &IMG_customers_yeti_2t },
+            { &IMG_customers_yeti_3, &IMG_customers_yeti_3b, &IMG_customers_yeti_3t },
+        },
+        {
+            { &IMG_customers_raton_0, &IMG_customers_raton_0b, &IMG_customers_raton_0t },
+            { &IMG_customers_raton_1, &IMG_customers_raton_1b, &IMG_customers_raton_1t },
+            { &IMG_customers_raton_2, &IMG_customers_raton_2b, &IMG_customers_raton_2t },
+            { &IMG_customers_raton_3, &IMG_customers_raton_3b, &IMG_customers_raton_3t },
+        },
+        {
+            { &IMG_customers_pigeon_0, &IMG_customers_pigeon_0b, &IMG_customers_pigeon_0t },
+            { &IMG_customers_pigeon_1, &IMG_customers_pigeon_1b, &IMG_customers_pigeon_1t },
+            { &IMG_customers_pigeon_2, &IMG_customers_pigeon_2b, &IMG_customers_pigeon_2t },
+            { &IMG_customers_pigeon_3, &IMG_customers_pigeon_3b, &IMG_customers_pigeon_3t },
+        },
+        {
+            { &IMG_customers_chauvesouris_0, &IMG_customers_chauvesouris_0b, &IMG_customers_chauvesouris_0t },
+            { &IMG_customers_chauvesouris_1, &IMG_customers_chauvesouris_1b, &IMG_customers_chauvesouris_1t },
+            { &IMG_customers_chauvesouris_2, &IMG_customers_chauvesouris_2b, &IMG_customers_chauvesouris_2t },
+            { &IMG_customers_chauvesouris_3, &IMG_customers_chauvesouris_3b, &IMG_customers_chauvesouris_3t },
+        },
+        {
+            { &IMG_customers_souris_0, &IMG_customers_souris_0b, &IMG_customers_souris_0t },
+            { &IMG_customers_souris_1, &IMG_customers_souris_1b, &IMG_customers_souris_1t },
+            { &IMG_customers_souris_2, &IMG_customers_souris_2b, &IMG_customers_souris_2t },
+            { &IMG_customers_souris_3, &IMG_customers_souris_3b, &IMG_customers_souris_3t },
+        },
+        {
+            { &IMG_customers_carlin_0, &IMG_customers_carlin_0b, &IMG_customers_carlin_0t },
+            { &IMG_customers_carlin_1, &IMG_customers_carlin_1b, &IMG_customers_carlin_1t },
+            { &IMG_customers_carlin_2, &IMG_customers_carlin_2b, &IMG_customers_carlin_2t },
+            { &IMG_customers_carlin_3, &IMG_customers_carlin_3b, &IMG_customers_carlin_3t },
+        },
+        {
+            { &IMG_customers_chat_noir_0, &IMG_customers_chat_noir_0b, &IMG_customers_chat_noir_0t },
+            { &IMG_customers_chat_noir_1, &IMG_customers_chat_noir_1b, &IMG_customers_chat_noir_1t },
+            { &IMG_customers_chat_noir_2, &IMG_customers_chat_noir_2b, &IMG_customers_chat_noir_2t },
+            { &IMG_customers_chat_noir_3, &IMG_customers_chat_noir_3b, &IMG_customers_chat_noir_3t },
+        },
+        {
+            { &IMG_customers_champignon_0, &IMG_customers_champignon_0b, &IMG_customers_champignon_0t },
+            { &IMG_customers_champignon_1, &IMG_customers_champignon_1b, &IMG_customers_champignon_1t },
+            { &IMG_customers_champignon_2, &IMG_customers_champignon_2b, &IMG_customers_champignon_2t },
+            { &IMG_customers_champignon_3, &IMG_customers_champignon_3b, &IMG_customers_champignon_3t },
+        },
+        {
+            { &IMG_customers_luciole_0, &IMG_customers_luciole_0b, &IMG_customers_luciole_0t },
+            { &IMG_customers_luciole_1, &IMG_customers_luciole_1b, &IMG_customers_luciole_1t },
+            { &IMG_customers_luciole_2, &IMG_customers_luciole_2b, &IMG_customers_luciole_2t },
+            { &IMG_customers_luciole_3, &IMG_customers_luciole_3b, &IMG_customers_luciole_3t },
+        },
+        {
+            { &IMG_customers_escargot_0, &IMG_customers_escargot_0b, &IMG_customers_escargot_0t },
+            { &IMG_customers_escargot_1, &IMG_customers_escargot_1b, &IMG_customers_escargot_1t },
+            { &IMG_customers_escargot_2, &IMG_customers_escargot_2b, &IMG_customers_escargot_2t },
+            { &IMG_customers_escargot_3, &IMG_customers_escargot_3b, &IMG_customers_escargot_3t },
+        },
+        {
+            { &IMG_customers_papillon_0, &IMG_customers_papillon_0b, &IMG_customers_papillon_0t },
+            { &IMG_customers_papillon_1, &IMG_customers_papillon_1b, &IMG_customers_papillon_1t },
+            { &IMG_customers_papillon_2, &IMG_customers_papillon_2b, &IMG_customers_papillon_2t },
+            { &IMG_customers_papillon_3, &IMG_customers_papillon_3b, &IMG_customers_papillon_3t },
+        },
+        {
+            { &IMG_customers_herisson_0, &IMG_customers_herisson_0b, &IMG_customers_herisson_0t },
+            { &IMG_customers_herisson_1, &IMG_customers_herisson_1b, &IMG_customers_herisson_1t },
+            { &IMG_customers_herisson_2, &IMG_customers_herisson_2b, &IMG_customers_herisson_2t },
+            { &IMG_customers_herisson_3, &IMG_customers_herisson_3b, &IMG_customers_herisson_3t },
+        },
+        {
+            { &IMG_customers_dragon_0, &IMG_customers_dragon_0b, &IMG_customers_dragon_0t },
+            { &IMG_customers_dragon_1, &IMG_customers_dragon_1b, &IMG_customers_dragon_1t },
+            { &IMG_customers_dragon_2, &IMG_customers_dragon_2b, &IMG_customers_dragon_2t },
+            { &IMG_customers_dragon_3, &IMG_customers_dragon_3b, &IMG_customers_dragon_3t },
         },
     };
     if (type < 0 || type >= CT_COUNT)
@@ -86,7 +232,7 @@ const Image *customer_image(int type, int mood)
     return customer_image_ex(type, mood, POSE_NORMAL);
 }
 
-static const Image *topping_icon(int ing)
+const Image *topping_icon(int ing)
 {
     switch (ing) {
     case ING_PEARLS:  return &IMG_icons_pearl;
@@ -94,6 +240,12 @@ static const Image *topping_icon(int ing)
     case ING_JELLY:   return &IMG_icons_jelly;
     case ING_ICE:     return &IMG_icons_ice;
     case ING_CREAM:   return &IMG_icons_cream;
+    case ING_SEA_CREAM:   return &IMG_icons_sea_cream;
+    case ING_NATA:        return &IMG_icons_nata;
+    case ING_MARSHMALLOW: return &IMG_icons_marshmallow;
+    case ING_PUDDING:     return &IMG_icons_pudding;
+    case ING_GLOW_JELLY:  return &IMG_icons_glow;
+    case ING_PETALS:      return &IMG_icons_petals;
     default:          return &IMG_icons_lock;
     }
 }
@@ -213,8 +365,9 @@ static void draw_tap(Surface *s, int i, bool pressed)
     Rect r = tap_rect(i);
     if (!visible(s, r))
         return;
-    const IngredientInfo *info = ing_info(TAP_INGS[i]);
-    bool locked = info->unlock_day > V->session->day.number;
+    Ingredient ing = TAP_ING(i);
+    const IngredientInfo *info = ing_info(ing);
+    bool locked = !level_has_ing(V->session->day.number, ing);
     draw_mask(s, &IMG_station_tap_mask, r.x, r.y, locked ? COL_GREY : info->color);
     if (pressed) {
         // Glouglou : des bulles remontent dans le réservoir pendant le versement
@@ -239,8 +392,9 @@ static void draw_pump(Surface *s, int i, bool flash)
     Rect r = pump_rect(i);
     if (!visible(s, r))
         return;
-    const IngredientInfo *info = ing_info(PUMP_INGS[i]);
-    bool locked = info->unlock_day > V->session->day.number;
+    Ingredient ing = PUMP_ING(i);
+    const IngredientInfo *info = ing_info(ing);
+    bool locked = !level_has_ing(V->session->day.number, ing);
     uint16_t body = locked ? COL_GREY : flash ? color_mix(info->color, COL_WHITE, 110) : info->color;
     draw_mask(s, &IMG_station_pump_mask, r.x, r.y, body);
     draw_image(s, flash ? &IMG_station_pump_on : &IMG_station_pump, r.x, r.y);
@@ -270,7 +424,16 @@ static void draw_selector(Surface *s)
     int nudge = waiting > 1 && ((V->frame / 15) & 1) ? 1 : 0;
     text_draw(s, r.x + 3 - nudge, r.y + 7, "<", COL_INK, 1);
     text_draw(s, r.x + r.w - 9 + nudge, r.y + 7, ">", COL_INK, 1);
-    const char *name = d->active >= 0 ? customer_type(d->slots[d->active].type)->name : "-";
+    const char *full = d->active >= 0 ? customer_type(d->slots[d->active].type)->name : "-";
+    char name[12];
+    snprintf(name, sizeof(name), "%s", full);
+    if (text_width(full, 1) > SEL_W - 20) {   // « Chauve-so. »
+        int chars = 0, i = 0;
+        for (; full[i] && chars < 8; i++)
+            if ((full[i] & 0xC0) != 0x80)
+                chars++;
+        snprintf(name, sizeof(name), "%.*s.", i, full);
+    }
     text_draw_aligned(s, r.x + 10, r.y + 2, r.w - 20, "Pour :", COL_INK_SOFT, ALIGN_CENTER);
     text_draw_aligned(s, r.x + 10, r.y + 12, r.w - 20, name, COL_INK, ALIGN_CENTER);
 }
@@ -280,9 +443,9 @@ static void draw_bin(Surface *s, int i)
     Rect r = bin_rect(i);
     if (!visible(s, r))
         return;
-    Ingredient ing = BIN_INGS[i];
+    Ingredient ing = BIN_ING(i);
     const IngredientInfo *info = ing_info(ing);
-    bool locked = info->unlock_day > V->session->day.number;
+    bool locked = !level_has_ing(V->session->day.number, ing);
     bool holding = V->held == (int)ing;
     draw_image(s, holding ? &IMG_station_bin_on : &IMG_station_bin, r.x, r.y);
     int jiggle = holding ? (((V->frame / 4) & 1) ? -1 : 1) : 0;
@@ -355,7 +518,7 @@ void shop_draw_bottom(Surface *s)
 
     if (visible(s, cup_rect())) {
         const ShopSession *ss = V->session;
-        int pour = V->pouring >= 0 ? (int)TAP_INGS[V->pouring] : 0;
+        int pour = V->pouring >= 0 ? (int)TAP_ING(V->pouring) : 0;
         for (int i = 0; i < ss->cup_count; i++) {
             bool active = i == ss->active_cup;
             int cx = cup_cx_of(i, ss->cup_count);
@@ -380,7 +543,7 @@ void shop_draw_bottom(Surface *s)
 // ================================================================ Écran haut
 
 // Accessoire dessiné par-dessus l'image d'un habitué (x, y = coin de l'image 40x48)
-static void draw_accessory(Surface *s, int acc, int x, int y)
+void draw_accessory(Surface *s, int acc, int x, int y)
 {
     switch (acc) {
     case ACC_BOW_GLASSES:
@@ -403,6 +566,27 @@ static void draw_accessory(Surface *s, int acc, int x, int y)
         draw_rect(s, x + 9, y + 7, 20, 3, COL_LAV_DARK);
         draw_rect(s, x + 18, y - 2, 2, 3, COL_LAV_DARK);
         draw_disc(s, x + 15, y + 4, 2, COL_LAVENDER);
+        break;
+    case ACC_SAILOR:   // casquette de marin
+        draw_rect(s, x + 9, y + 9, 22, 5, COL_WHITE);
+        draw_rect(s, x + 7, y + 13, 26, 2, RGB888(40, 60, 110));
+        draw_rect(s, x + 17, y + 10, 6, 3, RGB888(250, 200, 80));
+        draw_hline(s, x + 9, y + 9, 22, COL_GREY);
+        break;
+    case ACC_HEADPHONES:   // casque de DJ
+        for (int k = 0; k < 18; k++)
+            draw_pixel(s, x + 11 + k, y + 10 - (k < 9 ? k / 3 : (17 - k) / 3), COL_INK);
+        draw_rect(s, x + 4, y + 20, 6, 10, COL_PINK_DARK);
+        draw_rect(s, x + 30, y + 20, 6, 10, COL_PINK_DARK);
+        draw_vline(s, x + 5, y + 21, 7, COL_PINK);
+        draw_vline(s, x + 31, y + 21, 7, COL_PINK);
+        break;
+    case ACC_PRESS_HAT:   // grand chapeau de critique + plume
+        draw_ellipse(s, x + 20, y + 13, 19, 3, RGB888(60, 50, 70));
+        draw_rect(s, x + 12, y + 2, 16, 11, RGB888(60, 50, 70));
+        draw_hline(s, x + 12, y + 10, 16, COL_PINK_DARK);
+        draw_line(s, x + 27, y + 2, x + 34, y - 6, COL_WHITE);
+        draw_line(s, x + 28, y + 3, x + 35, y - 5, COL_GREY);
         break;
     }
 }
@@ -601,13 +785,13 @@ static void draw_hud(Surface *s)
     if (!visible(s, r))
         return;
     const Day *d = &V->session->day;
-    char buf[24];
+    char buf[40];
     draw_rect(s, 0, 0, SCREEN_W, HUD_H, COL_PINK);
     draw_hline(s, 0, HUD_H - 1, SCREEN_W, COL_PINK_DARK);
     if (d->endless)
         snprintf(buf, sizeof(buf), "RUSH");
     else
-        snprintf(buf, sizeof(buf), "Jour %d", d->number);
+        snprintf(buf, sizeof(buf), "Niv. %d-%d", d->world + 1, d->level + 1);
     text_draw(s, 4, 3, buf, d->endless ? COL_BAD : COL_INK, 1);
 
     int amb = 256 * d->ambiance / AMBIANCE_MAX;
@@ -713,14 +897,23 @@ void shop_draw_top(Surface *s)
 // ================================================================ Fonds statiques
 
 // Décors dessinés dans gfx/bg/ (tools/art/backgrounds.py)
+static const Image *const SHOP_TOP[WORLD_COUNT] = {
+    &IMG_bg_shop_top, &IMG_bg_shop_plage, &IMG_bg_shop_montagne, &IMG_bg_shop_ville, &IMG_bg_shop_foret,
+};
+static const Image *const STATION[WORLD_COUNT] = {
+    &IMG_bg_station, &IMG_bg_station_plage, &IMG_bg_station_montagne, &IMG_bg_station_ville,
+    &IMG_bg_station_foret,
+};
+
 static void draw_top_background(Surface *s)
 {
-    draw_image(s, &IMG_bg_shop_top, 0, 0);
+    draw_image(s, SHOP_TOP[V->session->day.world], 0, 0);
+    decor_set_world(V->session->day.world);
 }
 
 static void draw_bottom_background(Surface *s)
 {
-    draw_image(s, &IMG_bg_station, 0, 0);
+    draw_image(s, STATION[V->session->day.world], 0, 0);
 }
 
 void shop_draw_backgrounds(const ShopView *v)

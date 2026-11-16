@@ -11,17 +11,11 @@
 
 #define CUP_ITEMS 64
 
-typedef enum {
-    ITEM_PEARL,
-    ITEM_POP,
-    ITEM_JELLY,
-    ITEM_ICE,
-    ITEM_BUBBLE,     // bulle d'air pendant le versement
-} CupItemType;
+#define ITEM_BUBBLE 0xFF   // bulle d'air pendant le versement (sinon : un Ingredient)
 
 typedef struct {
-    uint8_t type;
-    uint8_t index;   // rang parmi les objets du même type (position de repos)
+    uint8_t ing;     // garniture (Ingredient) ou ITEM_BUBBLE
+    uint8_t index;   // rang parmi les objets de la même garniture (position de repos)
     bool resting;
     int16_t x;       // px, relatif au centre du gobelet
     int32_t y;       // 1/16 px, absolu

@@ -13,6 +13,7 @@
 #include "game/progress.h"
 #include "game/recipes.h"
 #include "game/specials.h"
+#include "game/world.h"
 #include "gfx/canvas.h"
 #include "gfx/font.h"
 
@@ -79,7 +80,12 @@ static void test_recipes(void)
             printf("  recette %d (%s) : score %d\n", i, r->name, s);
         CHECK(s == 100);
         // La recette doit être réalisable le jour où elle apparaît
-        CHECK(recipe_min_day(r) <= r->day);
+        // La recette est faisable dans son bar, au niveau où elle apparaît
+        int ml = recipe_min_level(r);
+        if (ml < 0 || ml > r->level)
+            printf("  recette %d (%s) : ingrédients pas au poste (niveau %d)\n", i, r->name, ml);
+        CHECK(ml >= 0 && ml <= r->level);
+        CHECK(r->world < WORLD_COUNT && r->level < LEVELS_PER_WORLD);
         // Le liquide doit remplir le gobelet
         int liquid = 0;
         for (int k = LIQUID_FIRST; k <= LIQUID_LAST; k++)
@@ -87,17 +93,27 @@ static void test_recipes(void)
         CHECK(liquid == CUP_CAPACITY);
         // La meilleure correspondance d'une boisson parfaite est elle-même
         int ms;
-        CHECK(recipe_best_match(&d, &ms) == i && ms == 100);
+        CHECK(recipe_best_match(&d, r->world, &ms) == i && ms == 100);
         char buf[48];
         CHECK(recipe_hint(r, &d, buf, sizeof(buf)) == NULL);
     }
-    CHECK(RECIPE_COUNT <= 32);   // tient dans le masque de sauvegarde
+    CHECK(RECIPE_COUNT <= RECIPE_MAX);   // tient dans le masque de sauvegarde
+    // Chaque bar a de quoi faire : au moins 8 recettes, dont une au niveau 0
+    for (int w = 0; w < WORLD_COUNT; w++) {
+        int n = 0, first = 0;
+        for (int i = 0; i < RECIPE_COUNT; i++)
+            if (RECIPES[i].world == w) {
+                n++;
+                first += RECIPES[i].level == 0 && !RECIPES[i].secret;
+            }
+        CHECK(n >= 8 && first >= 2);
+    }
 
-    // Recettes non ambiguës : aucune boisson parfaite n'en valide une autre à ≥ 85
+    // Recettes non ambiguës dans un même bar : aucune boisson parfaite n'en valide une autre à ≥ 85
     for (int i = 0; i < RECIPE_COUNT; i++) {
         make_perfect(&d, &RECIPES[i]);
         for (int j = 0; j < RECIPE_COUNT; j++) {
-            if (i == j)
+            if (i == j || RECIPES[i].world != RECIPES[j].world)
                 continue;
             int s = recipe_score(&RECIPES[j], &d);
             if (s >= 85)
@@ -156,7 +172,20 @@ static void test_recipes(void)
 static void test_progress(void)
 {
     progress_new();
-    CHECK(progress()->day == 1);
+    CHECK(progress()->level == 1);
+    CHECK(progress_level_unlocked(1) && !progress_level_unlocked(2));
+    CHECK(progress_record_level(1, 2));          // 1re réussite
+    CHECK(!progress_record_level(1, 1));         // on garde le meilleur
+    CHECK(progress()->stars[0] == 2 && progress_level_unlocked(2) && !progress_level_unlocked(3));
+    CHECK(progress_furthest_level() == 2 && progress_total_stars() == 2);
+    CHECK(progress_world_unlocked(0) && !progress_world_unlocked(1));
+    for (int l = 1; l <= 4; l++)
+        progress_record_level(l, 3);
+    CHECK(progress_world_unlocked(1) && progress_world_stars(0) == 12);
+    CHECK(!progress_game_finished());
+    progress_learn_recipe(40);
+    CHECK(progress_recipe_known(40));             // au-delà de 32 recettes
+    progress()->story = STORY_INTRO | STORY_ENDING;
     CHECK(progress_recipe_known(0));
     CHECK(!progress_recipe_known(1));
     progress_learn_recipe(5);
@@ -170,7 +199,9 @@ static void test_progress(void)
     progress_serialize(progress(), buf);
     CHECK(progress_deserialize(&copy, buf));
     CHECK(copy.coins == progress()->coins && copy.known_recipes == progress()->known_recipes);
-    CHECK(copy.upgrades == progress()->upgrades && copy.day == 1);
+    CHECK(copy.upgrades == progress()->upgrades && copy.level == 1);
+    CHECK(copy.stars[3] == 3 && copy.story == progress()->story && progress_recipe_known(40));
+    CHECK((copy.known_recipes >> 40) & 1);
     buf[10] ^= 0xFF;   // corruption
     CHECK(!progress_deserialize(&copy, buf));
 
@@ -184,7 +215,8 @@ static void test_progress(void)
     CHECK(copy.music_volume == 1 && copy.sfx_volume == 2 && copy.lefty && copy.best_rush == 77);
     progress_new_game();
     CHECK(progress()->music_volume == 1 && progress()->lefty && progress()->best_rush == 77);
-    CHECK(progress()->coins == 0 && progress()->day == 1 && progress()->upgrades == 0);
+    CHECK(progress()->coins == 0 && progress()->level == 1 && progress()->upgrades == 0);
+    CHECK(progress()->stars[0] == 0 && progress()->story == 0);
     progress_erase();
     CHECK(!progress_has_save() && progress()->best_rush == 0 && !progress()->lefty);
 }
@@ -258,26 +290,34 @@ static void test_rush(void)
 
 static void test_specials(void)
 {
-    // Toutes les commandes existent et sont réalisables le jour de la visite
-    for (int s = 0; s < SPECIAL_COUNT; s++) {
-        for (int v = 0; v < SPECIAL_VISITS; v++) {
-            int r = special_recipe(s, v);
+    // Chaque visite : recette existante, du bon bar, faisable au niveau de la visite
+    for (int sp = 0; sp < SPECIAL_COUNT; sp++) {
+        CHECK(SPECIALS[sp].visit_count >= 1 && SPECIALS[sp].visit_count <= SPECIAL_VISITS);
+        for (int v = 0; v < SPECIALS[sp].visit_count; v++) {
+            const SpecialVisit *vis = &SPECIALS[sp].visits[v];
+            int r = special_recipe(sp, v);
             if (r < 0)
-                printf("  recette introuvable : %s\n", SPECIALS[s].visits[v].recipe);
+                printf("  recette introuvable : %s\n", vis->recipe);
             CHECK(r >= 0);
+            CHECK(vis->level >= 1 && vis->level <= LEVEL_COUNT);
+            CHECK(level_world(vis->level) == special_world(sp));
+            if (v > 0)
+                CHECK(vis->level >= SPECIALS[sp].visits[v - 1].level);
             if (r >= 0) {
-                CHECK(RECIPES[r].day <= special_visit_day(s, v));
-                CHECK(recipe_min_day(&RECIPES[r]) <= special_visit_day(s, v));
+                if (!recipe_available(r, vis->level))
+                    printf("  %s : « %s » pas dispo au niveau %d\n", SPECIALS[sp].name, vis->recipe, vis->level);
+                CHECK(recipe_available(r, vis->level));
             }
-            CHECK(text_width(SPECIALS[s].visits[v].thanks, 1) > 0);
+            CHECK(text_width(vis->thanks, 1) > 0);
         }
     }
+    CHECK(SPECIAL_COUNT <= SPECIAL_MAX);
 
-    // Le jour 1, Mamie Lapine passe et commande le classique
+    // Au niveau 2, Mamie Lapine passe et commande le classique
     progress_new();
     Day day;
-    day_start(&day, 1, 3);
-    CHECK(day.special_today == 0);
+    day_start(&day, 2, 3);
+    CHECK(day.specials[0] == SP_MAMIE && day.specials[1] == -1);
     int slot = -1;
     for (int f = 0; f < DAY_DURATION && slot < 0; f++) {
         day_update(&day);
@@ -296,7 +336,7 @@ static void test_specials(void)
     CHECK(slot >= 0);
     if (slot >= 0) {
         Customer *c = &day.slots[slot];
-        CHECK(c->type == SPECIALS[0].type && c->recipe == special_recipe(0, 0) && !c->riddle);
+        CHECK(c->type == SPECIALS[SP_MAMIE].type && c->recipe == special_recipe(SP_MAMIE, 0) && !c->riddle);
         while (c->state != CS_WAITING)
             day_update(&day);
         day_select_slot(&day, slot);
@@ -305,27 +345,80 @@ static void test_specials(void)
         ServeResult r;
         int tips_before = day.tips;
         CHECK(day_serve(&day, &d, &r));
-        CHECK(progress()->special_steps[0] == 1);
-        CHECK(day.special_result == 1);
-        CHECK(day.tips - tips_before == r.tip && r.tip >= SPECIALS[0].tip_bonus);
-        CHECK(c->says == SPECIALS[0].visits[0].thanks);
+        CHECK(progress()->special_steps[SP_MAMIE] == 1);
+        CHECK(day.special_result[0] == 1);
+        CHECK(day.tips - tips_before == r.tip && r.tip >= SPECIALS[SP_MAMIE].tip_bonus);
+        CHECK(c->says == SPECIALS[SP_MAMIE].visits[0].thanks);
     }
-    // Visite suivante : pas avant le jour 3 ; le jour 2 c'est le Chef Panda
-    CHECK(special_due(2, progress()->special_steps) == 1);
-    uint8_t steps[4] = { 1, 1, 0, 0 };
-    CHECK(special_due(2, steps) == -1);
-    CHECK(special_due(3, steps) == 0);
-    uint8_t done[4] = { 3, 3, 3, 0 };
-    CHECK(special_due(50, done) == -1);
+
+    int due[SPECIALS_PER_LEVEL];
+    uint8_t steps[SPECIAL_MAX] = { 0 };
+    CHECK(specials_due(1, steps, due) == 0);
+    CHECK(specials_due(2, steps, due) == 1 && due[0] == SP_MAMIE);
+    CHECK(specials_due(4, steps, due) == 1);      // rattrapage dans le même bar
+    CHECK(specials_due(5, steps, due) == 0);      // pas dans un autre bar
+    steps[SP_MAMIE] = 1;
+    CHECK(specials_due(2, steps, due) == 0);      // prochaine visite au niveau 3
+    // Niveau 20 : la grenouille poète et la critique, deux habitués le même jour
+    uint8_t late[SPECIAL_MAX] = { 3, 3, 3, 3, 2, 1, 0, 0 };
+    CHECK(specials_due(20, late, due) == 2);
     // Pas d'habitué en mode Rush
-    day_start_rush(&day, 5, 1);
-    CHECK(day.special_today == -1);
-    // L'avancement est sauvegardé
-    progress()->special_steps[2] = 2;
-    uint8_t buf[SAVE_SIZE];
-    Progress copy;
-    progress_serialize(progress(), buf);
-    CHECK(progress_deserialize(&copy, buf) && copy.special_steps[0] == 1 && copy.special_steps[2] == 2);
+    day_start_rush(&day, 6, 1);
+    CHECK(day.specials[0] == -1 && day.specials[1] == -1);
+}
+
+static void test_worlds(void)
+{
+    for (int w = 0; w < WORLD_COUNT; w++) {
+        const World *wd = &WORLDS[w];
+        int at0 = 0;
+        // Pas de doublon au poste ; types d'ingrédients cohérents avec les emplacements
+        for (int i = 0; i < WORLD_TAPS; i++) {
+            CHECK(ing_info(wd->taps[i].ing)->kind == KIND_LIQUID);
+            at0 += wd->taps[i].level == 0;
+            for (int j = 0; j < i; j++)
+                CHECK(wd->taps[i].ing != wd->taps[j].ing);
+        }
+        for (int i = 0; i < WORLD_PUMPS; i++)
+            CHECK(ing_info(wd->pumps[i].ing)->kind == KIND_SYRUP);
+        for (int i = 0; i < WORLD_BINS; i++) {
+            CHECK(ing_info(wd->bins[i].ing)->kind == KIND_TOPPING);
+            CHECK(ing_info(wd->bins[i].ing)->style != TOP_NONE && ing_info(wd->bins[i].ing)->per_scoop > 0);
+        }
+        CHECK(at0 >= 2);
+        for (int i = 0; i < WORLD_CUSTOMERS; i++)
+            CHECK(wd->customers[i] < CT_COUNT);
+    }
+    CHECK(level_world(1) == 0 && level_index(1) == 0);
+    CHECK(level_world(20) == 4 && level_index(20) == 3);
+    CHECK(level_id(2, 1) == 10);
+
+    // Un niveau d'un nouveau bar : clients du bar, 1re recette connue, commande en clair
+    progress_new();
+    Day d;
+    day_start(&d, level_id(WORLD_MONTAGNE, 0), 77);
+    CHECK(d.world == WORLD_MONTAGNE && d.level == 0);
+    for (int f = 0; f < 3 * FPS; f++)
+        day_update(&d);
+    CHECK(d.active >= 0);
+    if (d.active >= 0) {
+        const Customer *c = &d.slots[d.active];
+        bool local = false;
+        for (int i = 0; i < WORLD_CUSTOMERS; i++)
+            local |= WORLDS[WORLD_MONTAGNE].customers[i] == c->type;
+        CHECK(local && !c->riddle && RECIPES[c->recipe].world == WORLD_MONTAGNE);
+    }
+    // Étoiles
+    Day e;
+    memset(&e, 0, sizeof(e));
+    e.ambiance = AMBIANCE_MAX;
+    CHECK(day_compute_stars(&e) == 2);            // pas d'objectif, aucun client perdu
+    e.objective_met = true;
+    CHECK(day_compute_stars(&e) == 3);
+    e.lost = 1;
+    CHECK(day_compute_stars(&e) == 2);
+    e.collapsed = true;
+    CHECK(day_compute_stars(&e) == 0);
 }
 
 static void test_tween_fx(void)
@@ -476,6 +569,7 @@ int main(void)
     test_rush();
     test_tween_fx();
     test_specials();
+    test_worlds();
     printf("%d vérifications, %d échec(s)\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

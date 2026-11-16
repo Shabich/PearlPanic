@@ -26,6 +26,7 @@
 static ShopSession g_session;
 static bool g_begin_requested = true;
 static bool g_rush_requested;
+static int g_rush_level = 1;
 static ShopView g_view;
 
 // Watches de l'écran haut
@@ -42,8 +43,9 @@ void shop_begin_day(void)
     g_rush_requested = false;
 }
 
-void shop_begin_rush(void)
+void shop_begin_rush(int level)
 {
+    g_rush_level = level;
     g_begin_requested = true;
     g_rush_requested = true;
 }
@@ -68,7 +70,7 @@ static int cup_at(int x, int y)
 
 static bool ing_unlocked(Ingredient ing)
 {
-    return ing_info(ing)->unlock_day <= g_session.day.number;
+    return level_has_ing(g_session.day.number, ing);
 }
 
 static void toast(const char *line1, const char *line2, uint16_t color)
@@ -100,9 +102,9 @@ static void shop_enter(void)
 {
     if (g_begin_requested || !g_session.in_progress) {
         if (g_rush_requested)
-            day_start_rush(&g_session.day, progress()->day, plat_entropy());
+            day_start_rush(&g_session.day, g_rush_level, plat_entropy());
         else
-            day_start(&g_session.day, progress()->day, plat_entropy());
+            day_start(&g_session.day, progress()->level, plat_entropy());
         drink_reset(&g_session.cups[0]);
         drink_reset(&g_session.cups[1]);
         g_session.active_cup = 0;
@@ -121,13 +123,15 @@ static void shop_enter(void)
             objective_describe(&g_session.day.objective, l1, sizeof(l1));
             snprintf(l2, sizeof(l2), "Objectif du jour : %s (+%d)", l1, g_session.day.objective.reward);
             if (g_session.day.number == 1)
-                snprintf(l1, sizeof(l1), "Jour 1 : bienvenue !");
+                snprintf(l1, sizeof(l1), "Niveau 1-1 : bienvenue !");
             else
-                snprintf(l1, sizeof(l1), "Jour %d : c'est parti !", g_session.day.number);
+                snprintf(l1, sizeof(l1), "Niveau %d-%d : c'est parti !", g_session.day.world + 1,
+                         g_session.day.level + 1);
             toast(l1, l2, COL_PINK_DARK);
         }
     }
     layout_set_lefty(progress()->lefty);
+    g_station_world = g_session.day.world;
     g_session.cup_count = progress_has_upgrade(UPG_SECOND_CUP) ? 2 : 1;
     if (g_session.active_cup >= g_session.cup_count)
         g_session.active_cup = 0;
@@ -185,7 +189,10 @@ static void serve(void)
 
     handle_events(first_event);   // annonces de l'habitué, déblocages
     char l1[48], l2[64];
-    if (d->slots[slot].special >= 0 && d->special_result == 1) {
+    bool special_done = false;
+    for (int k = 0; k < SPECIALS_PER_LEVEL; k++)
+        special_done |= d->specials[k] == d->slots[slot].special && d->special_result[k] == 1;
+    if (d->slots[slot].special >= 0 && special_done) {
         // le toast de l'habitué reste affiché
     } else if (r.unlocked >= 0) {
         snprintf(l1, sizeof(l1), "Nouvelle recette !");
@@ -274,7 +281,7 @@ static void update_station(const Input *in)
     if (in->touching && g_view.held == ING_NONE && !g_view.shaking) {
         for (int i = 0; i < TAP_COUNT; i++) {
             Rect r = tap_rect(i);
-            if (rect_contains(r, in->x, in->y) && ing_unlocked(TAP_INGS[i])) {
+            if (rect_contains(r, in->x, in->y) && ing_unlocked(TAP_ING(i))) {
                 pouring = i;
                 break;
             }
@@ -283,10 +290,10 @@ static void update_station(const Input *in)
     if (pouring >= 0 && !drink->sealed) {
         int speed = progress_has_upgrade(UPG_FAST_TAP) ? 2 : 1;
         bool was_full = drink->overflowed;
-        drink_pour(drink, TAP_INGS[pouring], speed);
+        drink_pour(drink, TAP_ING(pouring), speed);
         if (drink->overflowed && !was_full)
             toast("Oups, ça déborde !", "Relâche le stylet plus tôt.", COL_BAD);
-        uint16_t col = ing_info(TAP_INGS[pouring])->color;
+        uint16_t col = ing_info(TAP_ING(pouring))->color;
         if (drink->overflowed && (g_view.frame & 3) == 0)
             fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx() + ((g_view.frame & 4) ? 30 : -30), CUP_TOP_Y - 6, 1, col);
         else if ((g_view.frame & 7) == 0)
@@ -303,11 +310,11 @@ static void update_station(const Input *in)
         Rect r = pump_rect(i);
         if (g_view.pump_flash[i])
             g_view.pump_flash[i]--;
-        if (input_pressed_in(r.x, r.y, r.w, r.h) && ing_unlocked(PUMP_INGS[i])) {
-            if (drink_add(drink, PUMP_INGS[i])) {
+        if (input_pressed_in(r.x, r.y, r.w, r.h) && ing_unlocked(PUMP_ING(i))) {
+            if (drink_add(drink, PUMP_ING(i))) {
                 g_view.pump_flash[i] = 8;
                 plat_sfx(SFX_PUMP);
-                fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), active_surface_y(), 3, ing_info(PUMP_INGS[i])->color);
+                fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), active_surface_y(), 3, ing_info(PUMP_ING(i))->color);
             }
         }
     }
@@ -316,8 +323,8 @@ static void update_station(const Input *in)
     for (int i = 0; i < BIN_COUNT; i++) {
         Rect r = bin_rect(i);
         bool any_open = !g_session.cups[0].sealed || (g_session.cup_count == 2 && !g_session.cups[1].sealed);
-        if (input_pressed_in(r.x, r.y, r.w, r.h) && ing_unlocked(BIN_INGS[i]) && any_open) {
-            g_view.held = BIN_INGS[i];
+        if (input_pressed_in(r.x, r.y, r.w, r.h) && ing_unlocked(BIN_ING(i)) && any_open) {
+            g_view.held = BIN_ING(i);
             g_view.held_from = i;
         }
     }
@@ -372,10 +379,11 @@ static void update_pause(const Input *in)
         if (i == 0) {
             g_view.paused = false;
         } else if (i == 1) {
+            book_open_from(&SCENE_SHOP, g_session.day.world);
             scene_change(&SCENE_BOOK);
         } else {
             g_session.in_progress = false;
-            scene_change(&SCENE_TITLE);
+            scene_change(g_session.day.endless ? &SCENE_TITLE : &SCENE_MAP);
         }
     }
 }

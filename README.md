@@ -20,6 +20,18 @@ Le découpage du projet en sous-tâches est dans [`TASKS.md`](TASKS.md).
 Prérequis : Docker (ou BlocksDS installé avec `BLOCKSDS` défini), un compilateur C
 pour le PC, Python 3 + Pillow pour les outils.
 
+## L'histoire
+
+Perle, une petite loutre, ouvre son premier bar à bubble tea dans le Quartier des
+Lanternes. De bar en bar (plage, montagne, ville la nuit, forêt enchantée), sa
+réputation grandit… jusqu'à la visite d'une critique mystère et l'arrivée des
+journalistes.
+
+- 5 mondes de 4 niveaux, sur une carte où Perle avance de case en case ; 1 à 3 étoiles
+  par niveau (terminé, objectif atteint, aucun client perdu), niveaux rejouables.
+- Chaque bar a ses ingrédients, ses recettes, ses clients et son habitué.
+- Le Journal (sur la carte) reçoit de nouveaux articles au fil de la partie.
+
 ## Comment on joue
 
 - **Écran du haut** : les clients au comptoir, leur commande et leur jauge de patience,

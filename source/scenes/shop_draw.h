@@ -53,5 +53,8 @@ void recipe_describe(int recipe, char *buf, int size);
 enum { POSE_NORMAL, POSE_BLINK, POSE_TALK, CUSTOMER_POSES };
 const Image *customer_image(int type, int mood);
 const Image *customer_image_ex(int type, int mood, int pose);
+const Image *topping_icon(int ing);
+// Accessoire d'habitué (Accessory) sur une image de client posée en (x, y)
+void draw_accessory(Surface *s, int acc, int x, int y);
 
 #endif

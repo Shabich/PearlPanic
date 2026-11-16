@@ -16,12 +16,12 @@ Objective objective_for_day(int day, bool can_discover)
     if (o.type == OBJ_DISCOVER && !can_discover)
         o.type = OBJ_PERFECT;
     switch (o.type) {
-    case OBJ_SERVE:    o.target = (int16_t)(4 + day);          o.reward = 8;  break;
-    case OBJ_PERFECT:  o.target = (int16_t)(2 + day / 2);      o.reward = 10; break;
+    case OBJ_SERVE:    o.target = (int16_t)(5 + day / 2);      o.reward = 8;  break;
+    case OBJ_PERFECT:  o.target = (int16_t)(2 + day / 4);      o.reward = 10; break;
     case OBJ_NO_LOSS:  o.target = 0;                           o.reward = 12; break;
     case OBJ_DISCOVER: o.target = 1;                           o.reward = 10; break;
-    case OBJ_AMBIANCE: o.target = (int16_t)(day < 8 ? 50 + day * 3 : 75); o.reward = 12; break;
-    case OBJ_COINS:    o.target = (int16_t)(20 + 8 * day);     o.reward = 10; break;
+    case OBJ_AMBIANCE: o.target = (int16_t)(day < 10 ? 50 + day * 2 : 70); o.reward = 12; break;
+    case OBJ_COINS:    o.target = (int16_t)(24 + 4 * day);     o.reward = 10; break;
     default: break;
     }
     return o;

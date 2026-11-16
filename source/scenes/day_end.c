@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "core/input.h"
+#include "core/tween.h"
 #include "game/progress.h"
 #include "game/recipes.h"
 #include "game/specials.h"
@@ -20,49 +21,95 @@ static bool g_collapsed;
 static bool g_rush;
 static bool g_new_record;
 static uint32_t g_frame;
+static int g_stars, g_level;
+static bool g_first_clear;     // niveau réussi pour la première fois
+static bool g_play_ending;     // dernier niveau : cinématique de fin à suivre
 
-static void draw_top_fx(Surface *s) { fx_draw(SCREEN_TOP, s); }
+// Étoile 7x7 agrandie
+static void big_star(Surface *s, int cx, int cy, bool full, int scale)
+{
+    static const uint8_t STAR[7] = { 0x08, 0x08, 0x7F, 0x3E, 0x1C, 0x36, 0x63 };
+    uint16_t c = full ? COL_YELLOW : COL_GREY;
+    uint16_t edge = full ? RGB888(220, 150, 50) : COL_GREY_DARK;
+    if (scale < 1)
+        return;
+    for (int j = 0; j < 7; j++)
+        for (int i = 0; i < 7; i++)
+            if (STAR[j] >> i & 1)
+                draw_rect(s, cx - 3 * scale + i * scale, cy - 3 * scale + j * scale, scale, scale,
+                          (j == 6 || i == 0 || i == 6) ? edge : c);
+}
+
+// Les étoiles gagnées apparaissent une à une avec un petit rebond
+static void draw_top_fx(Surface *s)
+{
+    if (!g_rush) {
+        for (int k = 0; k < 3; k++) {
+            int start = 20 + k * 22;
+            bool full = k < g_stars;
+            int scale = 3;
+            if (full && (int)g_frame < start + 14) {
+                int p = ease_out_back(tw_progress((int)g_frame - start, 14));
+                scale = (int)g_frame < start ? 0 : 1 + p * 3 / 256;
+            }
+            if (!full && scale)
+                scale = 3;
+            big_star(s, 128 - 36 + k * 36, 38, full, scale);
+        }
+    }
+    fx_draw(SCREEN_TOP, s);
+}
 
 static Rect upgrade_rect(int i)
 {
     int x = i == UPG_COUNT - 1 && (UPG_COUNT & 1) ? 70 : 8 + (i & 1) * 124;
     return rect_make(x, 24 + (i >> 1) * 41, 116, 38);
 }
-static Rect next_rect(void) { return rect_make(56, 150, 144, 24); }
+static Rect next_rect(void) { return rect_make(132, 150, 116, 24); }
+static Rect retry_rect(void) { return rect_make(8, 150, 116, 24); }
 
 static void draw_summary(Surface *s, const Day *d)
 {
     char buf[96];
     ui_polka_background(s, COL_PINK_PALE, COL_WHITE);
-    snprintf(buf, sizeof(buf), "Fin du jour %d", d->number);
-    text_draw_shadow(s, (SCREEN_W - text_width(buf, 2)) / 2, 8, buf, COL_PINK_DARK, COL_WHITE, 2);
+    if (g_collapsed)
+        snprintf(buf, sizeof(buf), "Niveau %d-%d raté…", d->world + 1, d->level + 1);
+    else
+        snprintf(buf, sizeof(buf), "Niveau %d-%d réussi !", d->world + 1, d->level + 1);
+    text_draw_shadow(s, (SCREEN_W - text_width(buf, 2)) / 2, 4, buf, g_collapsed ? COL_BAD : COL_PINK_DARK,
+                     COL_WHITE, 2);
+
+    // Habitués venus aujourd'hui
+    int y = 56;
     if (g_collapsed) {
-        text_draw_aligned(s, 0, 30, SCREEN_W, "Ambiance effondrée : on réessaie !",
-                          COL_BAD, ALIGN_CENTER);
-    } else if (d->special_today >= 0 && d->special_result >= 0) {
-        const char *name = SPECIALS[d->special_today].name;
-        if (d->special_result)
-            snprintf(buf, sizeof(buf), "Visite réussie : %s !", name);
-        else
-            snprintf(buf, sizeof(buf), "%s reviendra un autre jour…", name);
-        text_draw_aligned(s, 0, 30, SCREEN_W, buf, COL_WOOD_DARK, ALIGN_CENTER);
+        text_draw_aligned(s, 0, y, SCREEN_W, "L'ambiance s'est effondrée : on réessaie ?", COL_BAD, ALIGN_CENTER);
+    } else {
+        for (int k = 0; k < SPECIALS_PER_LEVEL; k++) {
+            if (d->specials[k] < 0 || d->special_result[k] < 0)
+                continue;
+            const char *name = SPECIALS[d->specials[k]].name;
+            if (d->special_result[k])
+                snprintf(buf, sizeof(buf), "Visite réussie : %s !", name);
+            else
+                snprintf(buf, sizeof(buf), "%s reviendra…", name);
+            text_draw_aligned(s, 0, y, SCREEN_W, buf, COL_WOOD_DARK, ALIGN_CENTER);
+            break;
+        }
     }
 
-    draw_round_rect(s, 16, 44, 224, 100, COL_CREAM, COL_WOOD_DARK);
-    int y = 50;
-    snprintf(buf, sizeof(buf), "Clients servis      %d", d->served);
+    draw_round_rect(s, 16, 70, 224, 72, COL_CREAM, COL_WOOD_DARK);
+    y = 75;
+    snprintf(buf, sizeof(buf), "Clients servis      %d (%d parfaits)", d->served, d->perfect);
     text_draw(s, 26, y, buf, COL_INK, 1);
-    snprintf(buf, sizeof(buf), "dont parfaits       %d", d->perfect);
-    text_draw(s, 26, y += 13, buf, COL_INK, 1);
     snprintf(buf, sizeof(buf), "Clients perdus      %d", d->lost);
     text_draw(s, 26, y += 13, buf, d->lost ? COL_BAD : COL_INK, 1);
-    snprintf(buf, sizeof(buf), "Recettes            %d pièces", d->coins);
-    text_draw(s, 26, y += 13, buf, COL_INK, 1);
-    snprintf(buf, sizeof(buf), "Pourboires          %d pièces", d->tips);
+    snprintf(buf, sizeof(buf), "Pièces gagnées      %d (+%d pourboires)", d->coins, d->tips);
     text_draw(s, 26, y += 13, buf, COL_INK, 1);
     snprintf(buf, sizeof(buf), "Ambiance finale     %d %%", d->ambiance / 10);
     text_draw(s, 26, y += 13, buf, COL_INK, 1);
-    snprintf(buf, sizeof(buf), "Livre de recettes   %d / %d", progress_known_count(), RECIPE_COUNT);
+    int total;
+    int known = progress_known_in_world(d->world, &total);
+    snprintf(buf, sizeof(buf), "Recettes du bar     %d / %d", known, total);
     text_draw(s, 26, y += 13, buf, COL_LAV_DARK, 1);
 
     if (d->objective.type != OBJ_NONE) {
@@ -72,17 +119,19 @@ static void draw_summary(Surface *s, const Day *d)
             snprintf(buf, sizeof(buf), "Objectif réussi : %s (+%d)", obj, d->objective.reward);
         else
             snprintf(buf, sizeof(buf), "Objectif manqué : %s", obj);
-        text_draw_aligned(s, 0, 166, SCREEN_W, buf, d->objective_met ? COL_MINT_DARK : COL_INK_SOFT,
+        text_draw_aligned(s, 0, 148, SCREEN_W, buf, d->objective_met ? COL_MINT_DARK : COL_INK_SOFT,
                           ALIGN_CENTER);
     }
-
     if (d->unlocked_count) {
         int n = 0;
         n += snprintf(buf, sizeof(buf), "Découvert : ");
         for (int i = 0; i < d->unlocked_count && n < (int)sizeof(buf); i++)
             n += snprintf(buf + n, sizeof(buf) - n, "%s%s", i ? ", " : "", RECIPES[d->unlocked[i]].name);
-        text_draw_wrapped(s, 16, 148, 224, buf, COL_LAV_DARK, ALIGN_CENTER);
+        text_draw_wrapped(s, 16, 162, 224, buf, COL_LAV_DARK, ALIGN_CENTER);
     }
+    // Indication des étoiles
+    text_draw_aligned(s, 0, 180, SCREEN_W, "Étoiles : fini, objectif, sans perte",
+                      COL_INK_SOFT, ALIGN_CENTER);
 }
 
 static void draw_rush_summary(Surface *s, const Day *d)
@@ -145,8 +194,8 @@ static void draw_shop(Surface *s)
             draw_image(s, &IMG_icons_coin, r.x + r.w - 21 - tw, r.y + 1);
         }
     }
-    snprintf(buf, sizeof(buf), g_collapsed ? "Réessayer le jour %d" : "Jour %d !", progress()->day);
-    ui_button(s, next_rect(), buf, BTN_STYLE_PRIMARY);
+    ui_button(s, retry_rect(), "Rejouer", g_collapsed ? BTN_STYLE_PRIMARY : BTN_STYLE_NORMAL);
+    ui_button(s, next_rect(), g_play_ending ? "La suite !" : "Carte", g_collapsed ? BTN_STYLE_NORMAL : BTN_STYLE_PRIMARY);
     text_draw_aligned(s, 0, 179, SCREEN_W, "Partie sauvegardée", COL_INK_SOFT, ALIGN_CENTER);
 }
 
@@ -182,8 +231,11 @@ static void day_end_enter(void)
     p->total_served += d->served;
     if ((uint32_t)earned > p->best_day_coins)
         p->best_day_coins = earned;
-    if (!d->collapsed)
-        p->day = d->number + 1;
+    g_level = d->number;
+    g_stars = d->stars;
+    g_first_clear = progress_record_level(d->number, d->stars);
+    g_play_ending = d->number == LEVEL_COUNT && d->stars > 0 && !(p->story & STORY_ENDING);
+    p->level = (uint8_t)d->number;
     progress_save();
 
     g_frame = 0;
@@ -204,6 +256,15 @@ static void day_end_update(void)
         fx_emit(SCREEN_TOP, FX_COIN, 40 + (int)(g_frame * 37 % 176), 150, 2, 0);
     if ((g_frame % 30) == 15)
         fx_emit(SCREEN_TOP, g_collapsed ? FX_SMOKE : FX_SPARKLE, 128, 20, g_collapsed ? 1 : 3, 0);
+    for (int k = 0; k < g_stars && !g_rush; k++)
+        if ((int)g_frame == 20 + k * 22 + 6) {
+            fx_emit(SCREEN_TOP, FX_STAR, 128 - 36 + k * 36, 38, 6, 0);
+            plat_sfx(k == 2 ? SFX_UNLOCK : SFX_PLOP);
+        }
+    if (g_frame < 120)
+        screen_dirty(SCREEN_TOP, rect_make(70, 20, 116, 36));
+    if (g_frame == 90 && g_first_clear)   // niveau suivant débloqué : petite fête
+        fx_emit(SCREEN_TOP, FX_HEART, 128, 40, 8, 0);
     fx_update();
     if (scene_transitioning())
         return;
@@ -228,10 +289,18 @@ static void day_end_update(void)
         g_flash_upgrade = i;
         g_flash_timer = 10;
     }
-    Rect n = next_rect();
-    if (input_tapped_in(n.x, n.y, n.w, n.h) || (in->down & (BTN_A | BTN_START))) {
+    Rect n = next_rect(), r = retry_rect();
+    if (input_tapped_in(r.x, r.y, r.w, r.h) || (g_collapsed && (in->down & BTN_A))) {
+        progress()->level = (uint8_t)g_level;
         shop_begin_day();
         scene_change(&SCENE_SHOP);
+    } else if (input_tapped_in(n.x, n.y, n.w, n.h) || (in->down & BTN_START) || (!g_collapsed && (in->down & BTN_A))) {
+        if (g_play_ending) {
+            cutscene_play(CUT_ENDING, &SCENE_MAP);
+            scene_change(&SCENE_CUTSCENE);
+        } else {
+            scene_change(&SCENE_MAP);
+        }
     }
     uint32_t h = hash_add(hash_begin(), (int32_t)progress()->coins);
     h = hash_add(h, progress()->upgrades);

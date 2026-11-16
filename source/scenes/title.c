@@ -21,7 +21,7 @@ static bool g_has_save;
 static int g_confirm_new;    // > 0 : « Nouvelle partie » attend une confirmation
 static Watch w_buttons;
 
-static bool rush_unlocked(void) { return progress()->day >= 2; }
+static bool rush_unlocked(void) { return progress_furthest_level() >= 2; }
 
 static Rect button_rect(TitleButton b) { return rect_make(48, 40 + b * 32, 160, 26); }
 
@@ -45,12 +45,14 @@ static void draw_parade(Surface *s)
     decor_title_sky(s, g_frame);
     draw_title_text(s);
     // Les clients défilent sur le trottoir en sautillant et en clignant des yeux
-    for (int i = 0; i < CT_COUNT; i++) {
-        int x = (int)((g_frame / 2 + i * 48) % (SCREEN_W + 48)) - 44;
-        int hop = ((g_frame / 6 + i) & 3) == 0 ? -2 : 0;
-        int pose = ((g_frame + i * 41) % 120) < 6 ? POSE_BLINK
-                 : ((g_frame / 90 + i) % 3 == 0 && (g_frame / 8) & 1) ? POSE_TALK : POSE_NORMAL;
-        draw_image(s, customer_image_ex(i, (g_frame / 90 + i) % 2 ? 0 : 1, pose), x, 140 + hop);
+    // 7 clients pris dans les différents bars, bien espacés
+    for (int k = 0; k < 7; k++) {
+        int i = (k * 5 + 1) % CT_COUNT;
+        int x = (int)((g_frame / 2 + k * 48) % (7 * 48)) - 44;
+        int hop = ((g_frame / 6 + k) & 3) == 0 ? -2 : 0;
+        int pose = ((g_frame + k * 41) % 120) < 6 ? POSE_BLINK
+                 : ((g_frame / 90 + k) % 3 == 0 && (g_frame / 8) & 1) ? POSE_TALK : POSE_NORMAL;
+        draw_image(s, customer_image_ex(i, (g_frame / 90 + k) % 2 ? 0 : 1, pose), x, 140 + hop);
     }
     fx_draw(SCREEN_TOP, s);
 }
@@ -61,7 +63,8 @@ static void draw_title_bottom(Surface *s)
     decor_polka(s, COL_CREAM, COL_CREAM_DARK, g_frame);
     text_draw_aligned(s, 0, 14, SCREEN_W, "Touche un bouton avec le stylet", COL_INK_SOFT, ALIGN_CENTER);
     if (g_has_save) {
-        snprintf(label, sizeof(label), "Continuer (jour %d)", progress()->day);
+        int lvl = progress_furthest_level();
+        snprintf(label, sizeof(label), "Continuer (niveau %d-%d)", level_world(lvl) + 1, level_index(lvl) + 1);
         ui_button(s, button_rect(TB_CONTINUE), label, BTN_STYLE_PRIMARY);
     } else {
         ui_button(s, button_rect(TB_CONTINUE), "Pas de sauvegarde", BTN_STYLE_DISABLED);
@@ -75,7 +78,7 @@ static void draw_title_bottom(Surface *s)
             snprintf(label, sizeof(label), "Mode Rush");
         ui_button(s, button_rect(TB_RUSH), label, BTN_STYLE_NORMAL);
     } else {
-        ui_button(s, button_rect(TB_RUSH), "Rush : finis le jour 1", BTN_STYLE_DISABLED);
+        ui_button(s, button_rect(TB_RUSH), "Rush : finis le niveau 1", BTN_STYLE_DISABLED);
     }
     ui_button(s, button_rect(TB_OPTIONS), "Options", BTN_STYLE_NORMAL);
 }
@@ -103,8 +106,13 @@ static void start_story(bool fresh)
         progress_new_game();
         progress_save();
     }
-    shop_begin_day();
-    scene_change(&SCENE_SHOP);
+    // Première fois : la cinématique d'ouverture, puis la carte
+    if (!(progress()->story & STORY_INTRO)) {
+        cutscene_play(CUT_INTRO, &SCENE_MAP);
+        scene_change(&SCENE_CUTSCENE);
+    } else {
+        scene_change(&SCENE_MAP);
+    }
 }
 
 static bool tapped(TitleButton b)
@@ -142,7 +150,8 @@ static void title_update(void)
         }
     } else if (tapped(TB_RUSH) && rush_unlocked()) {
         plat_sfx(SFX_BELL);
-        shop_begin_rush();
+        int lvl = progress_furthest_level();
+        shop_begin_rush(level_id(level_world(lvl), LEVELS_PER_WORLD - 1));
         scene_change(&SCENE_SHOP);
     } else if (tapped(TB_OPTIONS)) {
         plat_sfx(SFX_CLICK);

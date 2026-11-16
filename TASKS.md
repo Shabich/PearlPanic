@@ -140,6 +140,19 @@ Les dépendances sont notées `→ dépend de`.
 
 ---
 
+## 10. Mondes, carte, journal et histoire
+
+- [x] **10.1** 5 mondes = 5 bars (Petit Bar, Paillote, Chalet, Kiosque Néon, Arbre aux Thés), 4 niveaux chacun
+- [x] **10.2** Ingrédients, recettes (59), clients (30 espèces) et habitués propres à chaque bar
+- [x] **10.3** Carte façon carte de niveaux, animée (fumée, eau, bateau, néons, voitures, lucioles, neige…), Perle qui marche de case en case
+- [x] **10.4** Étoiles par niveau (terminé, objectif, aucun client perdu), niveaux rejouables
+- [x] **10.5** Journal « L'Écho des Perles » : 23 articles débloqués au fil des niveaux, fil rouge de la critique mystère
+- [x] **10.6** Cinématiques : ouverture du premier bar, arrivée dans chaque bar, fin (article de Plume, afflux de journalistes, générique)
+- [x] **10.7** Héroïne : Perle la loutre (cinématiques + sprite de carte)
+- [x] **10.8** Intérieurs et postes de travail propres à chaque bar, vue animée par les fenêtres
+- [ ] **10.9** Musique par bar (une seule boucle pour l'instant)
+- [ ] **10.10** Équilibrage des 20 niveaux en jouant
+
 ## Jalons
 
 | Jalon | Contenu | Tâches |
