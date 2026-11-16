@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logos/logo_grand.png" width="512" alt="Pearl Panic"></p>
+
 # Pearl Panic
 
 Jeu de gestion de bubble tea pour **Nintendo DS**, écrit en C. Pixel art pastel,
@@ -38,6 +40,7 @@ Les deux écrans de la DS (haut et bas), captés par `make snap`.
 | `make test` | tests unitaires de la logique, compilés pour le PC |
 | `make snap` | joue un scénario scripté sur PC et écrit des captures dans `build/snap/` |
 | `make assets` | régénère les graphismes placeholder et leur conversion en C |
+| `python3 tools/gen_logo.py` | régénère le logo du README (`docs/logos/`) |
 | `make clean` | supprime les artefacts |
 
 Prérequis : Docker (ou BlocksDS installé avec `BLOCKSDS` défini), un compilateur C
