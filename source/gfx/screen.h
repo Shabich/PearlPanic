@@ -29,7 +29,11 @@ void screen_set_overlay(ScreenId id, DynamicDrawFn fn);
 void screen_dirty(ScreenId id, Rect r);
 void screen_dirty_all(ScreenId id);
 
-// Recompose les zones sales vers l'affichage. Appelé une fois par frame.
+// Recompose les zones sales dans une image en RAM (avant le VBlank)…
+void screen_compose(void);
+// … puis copie seulement le résultat final vers l'affichage (juste après le VBlank).
+void screen_flush(void);
+// Les deux à la suite
 void screen_present(void);
 
 // Aide : suit la boîte englobante d'un objet mobile et marque les zones

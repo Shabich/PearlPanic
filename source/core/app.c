@@ -48,6 +48,9 @@ void app_frame(void)
     }
 
     scene_update();
+    // Composition hors écran pendant l'affichage, puis copie juste après le VBlank :
+    // pas de scintillement (on ne montre jamais une zone à moitié redessinée)
+    screen_compose();
     plat_wait_vblank();
-    screen_present();
+    screen_flush();
 }

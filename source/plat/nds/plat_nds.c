@@ -28,6 +28,7 @@ static int g_pour_timer;
 static bool g_music_on;
 static uint32_t g_frame;
 static int g_music_volume = 4;
+static int g_music_tempo = -1;
 static int g_load;
 
 static const mm_word SFX_MAP[SFX_COUNT] = {
@@ -137,7 +138,11 @@ void plat_music_tempo(int permille)
 {
     // maxmod : 1024 = tempo normal (plage 512..2048)
     int t = 1024 * permille / 1000;
-    mmSetModuleTempo(t < 512 ? 512 : t > 2048 ? 2048 : t);
+    t = t < 512 ? 512 : t > 2048 ? 2048 : t;
+    if (t == g_music_tempo)
+        return;
+    g_music_tempo = t;
+    mmSetModuleTempo(t);
 }
 
 void plat_set_volumes(int music, int sfx)

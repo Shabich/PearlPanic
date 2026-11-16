@@ -140,7 +140,19 @@ def encode_pattern(pat):
     return out
 
 
+def oneshot(data):
+    """Son joué une seule fois : en MOD, les 2 premiers octets sont rejoués en boucle
+    après la fin (replen = 1). Ils doivent être nuls, sinon on entend un bourdonnement."""
+    data = b"\0\0" + data
+    if len(data) % 2:
+        data += b"\0"
+    return data
+
+
 def main():
+    for i, (name, smp, vol, loop) in enumerate(SAMPLES):
+        if not loop:
+            SAMPLES[i] = (name, oneshot(smp), vol, loop)
     patterns = [build_pattern(0), build_pattern(1)]
     order = [0, 1, 0, 1]
     data = bytearray(b"Pearl Panic cozy".ljust(20, b"\0"))

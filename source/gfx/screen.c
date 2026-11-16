@@ -6,20 +6,27 @@
 
 typedef struct {
     Surface bg;
+    Surface back;          // image en cours de composition (RAM)
     DynamicDrawFn draw;
     DynamicDrawFn overlay;
     Rect dirty[MAX_DIRTY];
     int dirty_count;
     bool all_dirty;
+    // Zones composées, à copier vers l'affichage au prochain VBlank
+    Rect ready[MAX_DIRTY];
+    int ready_count;
 } ScreenState;
 
 static uint16_t g_bg_pixels[2][SCREEN_W * SCREEN_H];
+static uint16_t g_back_pixels[2][SCREEN_W * SCREEN_H];
 static ScreenState g_screens[2];
 
 void screen_init(void)
 {
     for (int i = 0; i < 2; i++) {
         surface_init(&g_screens[i].bg, g_bg_pixels[i], SCREEN_W, SCREEN_H, SCREEN_W);
+        surface_init(&g_screens[i].back, g_back_pixels[i], SCREEN_W, SCREEN_H, SCREEN_W);
+        g_screens[i].ready_count = 0;
         g_screens[i].draw = 0;
         g_screens[i].dirty_count = 0;
         g_screens[i].all_dirty = true;
@@ -69,31 +76,56 @@ void screen_dirty(ScreenId id, Rect r)
     s->dirty[s->dirty_count++] = r;
 }
 
-static void compose(Surface *front, ScreenState *s, Rect r)
+// Compose une zone dans l'image en RAM : fond, couche dynamique, overlay.
+// Rien n'est visible à l'écran tant que screen_flush() n'a pas copié la zone :
+// on ne voit donc jamais l'état intermédiaire (fond seul), source de scintillement.
+static void compose(ScreenState *s, Rect r)
 {
-    surface_copy_rect(front, &s->bg, r);
-    front->clip = r;
+    Surface *back = &s->back;
+    surface_copy_rect(back, &s->bg, r);
+    back->clip = r;
     if (s->draw)
-        s->draw(front);
+        s->draw(back);
     if (s->overlay)
-        s->overlay(front);
-    surface_reset_clip(front);
+        s->overlay(back);
+    surface_reset_clip(back);
+    if (s->ready_count < MAX_DIRTY)
+        s->ready[s->ready_count++] = r;
+    else
+        s->ready[MAX_DIRTY - 1] = rect_union(s->ready[MAX_DIRTY - 1], r);
 }
 
-void screen_present(void)
+void screen_compose(void)
 {
     for (int i = 0; i < 2; i++) {
         ScreenState *s = &g_screens[i];
-        Surface *front = plat_screen(i);
         if (s->all_dirty) {
-            compose(front, s, rect_make(0, 0, SCREEN_W, SCREEN_H));
+            s->ready_count = 0;
+            compose(s, rect_make(0, 0, SCREEN_W, SCREEN_H));
         } else {
             for (int k = 0; k < s->dirty_count; k++)
-                compose(front, s, s->dirty[k]);
+                compose(s, s->dirty[k]);
         }
         s->all_dirty = false;
         s->dirty_count = 0;
     }
+}
+
+void screen_flush(void)
+{
+    for (int i = 0; i < 2; i++) {
+        ScreenState *s = &g_screens[i];
+        Surface *front = plat_screen(i);
+        for (int k = 0; k < s->ready_count; k++)
+            surface_copy_rect(front, &s->back, s->ready[k]);
+        s->ready_count = 0;
+    }
+}
+
+void screen_present(void)
+{
+    screen_compose();
+    screen_flush();
 }
 
 void screen_track(ScreenId id, Tracked *t, Rect now, bool visible, bool force)
