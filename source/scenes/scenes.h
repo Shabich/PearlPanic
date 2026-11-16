@@ -4,6 +4,23 @@
 #include "core/scene.h"
 
 extern const Scene SCENE_TITLE;
-extern const Scene SCENE_SANDBOX;
+extern const Scene SCENE_SHOP;
+extern const Scene SCENE_DAY_END;
+extern const Scene SCENE_BOOK;
+
+// État partagé entre la boutique et ses écrans annexes (livre, fin de journée)
+#include "game/day.h"
+#include "game/drink.h"
+
+typedef struct {
+    bool in_progress;   // une journée est en cours (retour du livre de recettes)
+    Day day;
+    Drink drink;
+} ShopSession;
+
+ShopSession *shop_session(void);
+
+// Démarre une nouvelle journée au prochain passage dans SCENE_SHOP
+void shop_begin_day(void);
 
 #endif

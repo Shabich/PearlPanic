@@ -1,0 +1,51 @@
+// Rendu de la boutique (séparé de la logique de shop.c)
+#ifndef PP_SHOP_DRAW_H
+#define PP_SHOP_DRAW_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "gfx/canvas.h"
+#include "scenes/scenes.h"
+
+typedef struct {
+    ShopSession *session;
+    uint32_t frame;
+    int pouring;            // tireuse active, -1 sinon
+    int pump_flash[4];
+    int held;               // Ingredient tenu au stylet (ING_NONE sinon)
+    int held_from;
+    bool shaking;
+    int shake_dir, shake_reversals;
+    int wobble;
+    bool paused;
+    int end_timer;
+    char toast1[48], toast2[64];
+    uint16_t toast_color;
+    int toast_timer;
+    int toast_id;
+    int coin_popup, coin_popup_timer, coin_popup_slot;
+} ShopView;
+
+#define PAUSE_BUTTONS 3
+Rect pause_button_rect(int i);
+
+void shop_draw_backgrounds(const ShopView *v);
+void shop_draw_top(Surface *s);
+void shop_draw_bottom(Surface *s);
+
+uint32_t shop_slot_hash(const ShopView *v, int slot);
+uint32_t shop_tutorial_hash(const ShopView *v);
+uint32_t shop_actions_hash(const ShopView *v);
+uint32_t shop_cup_hash(const ShopView *v);
+
+// Dessine un gobelet complet (aussi utilisé par le livre de recettes)
+void draw_cup(Surface *s, int cx, int dy, const Drink *d, int wobble, int pouring_ing);
+
+// Liste lisible des ingrédients d'une recette (« thé noir 70 %, perles ×2 »)
+void recipe_describe(int recipe, char *buf, int size);
+
+// Images de client par type et humeur
+const Image *customer_image(int type, int mood);
+
+#endif

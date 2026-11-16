@@ -5,8 +5,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "plat/plat.h"
+
 typedef struct {
-    // Boutons (masques KEY_*)
+    // Boutons (masques BTN_*)
     uint32_t held;
     uint32_t down;     // pressés cette frame
     uint32_t up;       // relâchés cette frame
@@ -23,10 +25,15 @@ typedef struct {
     int touch_frames;  // durée de la pose en cours (ou de la dernière)
 } Input;
 
-void input_update(void);
+// Met à jour l'état à partir de l'entrée brute de la frame
+void input_feed(const RawInput *raw);
 const Input *input_get(void);
 
 // Vrai si le stylet est posé dans le rectangle [x, x+w) x [y, y+h)
 bool input_touch_in(int x, int y, int w, int h);
+// Vrai si le stylet vient d'être posé dans le rectangle
+bool input_pressed_in(int x, int y, int w, int h);
+// Vrai si un tap vient de se terminer dans le rectangle
+bool input_tapped_in(int x, int y, int w, int h);
 
 #endif

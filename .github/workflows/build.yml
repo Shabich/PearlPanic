@@ -1,0 +1,26 @@
+# Compile la ROM DS et lance les tests de logique à chaque push (tâche 0.6)
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rom:
+    runs-on: ubuntu-latest
+    container: skylyrac/blocksds:slim-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ROM
+        run: make
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pearlpanic-nds
+          path: pearlpanic.nds
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host unit tests
+        run: make test
