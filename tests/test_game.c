@@ -5,6 +5,9 @@
 
 #include "core/input.h"
 #include "core/rng.h"
+#include "core/tween.h"
+#include "game/objectives.h"
+#include "scenes/fx.h"
 #include "game/day.h"
 #include "game/drink.h"
 #include "game/progress.h"
@@ -169,6 +172,115 @@ static void test_progress(void)
     CHECK(copy.upgrades == progress()->upgrades && copy.day == 1);
     buf[10] ^= 0xFF;   // corruption
     CHECK(!progress_deserialize(&copy, buf));
+
+    // Réglages : sauvegardés, et conservés par une nouvelle partie
+    progress()->music_volume = 1;
+    progress()->sfx_volume = 2;
+    progress()->lefty = true;
+    progress()->best_rush = 77;
+    progress_serialize(progress(), buf);
+    CHECK(progress_deserialize(&copy, buf));
+    CHECK(copy.music_volume == 1 && copy.sfx_volume == 2 && copy.lefty && copy.best_rush == 77);
+    progress_new_game();
+    CHECK(progress()->music_volume == 1 && progress()->lefty && progress()->best_rush == 77);
+    CHECK(progress()->coins == 0 && progress()->day == 1 && progress()->upgrades == 0);
+    progress_erase();
+    CHECK(!progress_has_save() && progress()->best_rush == 0 && !progress()->lefty);
+}
+
+static void test_objectives(void)
+{
+    progress_new();
+    for (int day = 1; day <= 12; day++) {
+        Objective o = objective_for_day(day, true);
+        CHECK(o.type > OBJ_NONE && o.type < OBJ_COUNT && o.reward > 0);
+        char buf[48];
+        objective_describe(&o, buf, sizeof(buf));
+        CHECK(buf[0] && buf[0] != '-');
+    }
+    // Sans recette à découvrir, pas d'objectif de découverte
+    for (int day = 1; day <= 12; day++)
+        CHECK(objective_for_day(day, false).type != OBJ_DISCOVER);
+
+    Day d;
+    day_start(&d, 1, 5);
+    CHECK(d.objective.type == OBJ_SERVE);
+    d.served = d.objective.target - 1;
+    CHECK(!objective_done(&d.objective, &d));
+    d.served++;
+    CHECK(objective_done(&d.objective, &d));
+
+    Objective nl = { OBJ_NO_LOSS, 0, 5 };
+    d.lost = 0;
+    CHECK(objective_done(&nl, &d));
+    d.lost = 1;
+    CHECK(!objective_done(&nl, &d));
+
+    // L'objectif est évalué à la fin de la journée
+    progress_new();
+    day_start(&d, 1, 5);
+    while (!d.ended)
+        day_update(&d);
+    CHECK(d.objective_met == objective_done(&d.objective, &d));
+}
+
+static void test_rush(void)
+{
+    progress_new();
+    progress_learn_recipe(1);
+    progress_learn_recipe(2);
+    Day d;
+    day_start_rush(&d, 3, 11);
+    CHECK(d.endless && d.objective.type == OBJ_NONE);
+    int arrivals = 0, riddles = 0;
+    uint32_t limit = 30 * 60 * FPS;
+    while (!d.ended && d.frame < limit) {
+        day_update(&d);
+        for (int e = 0; e < d.event_count; e++) {
+            if (d.events[e].type == EV_ARRIVE) {
+                arrivals++;
+                const Customer *c = &d.slots[d.events[e].slot];
+                riddles += c->riddle;
+                CHECK(progress_recipe_known(c->recipe));
+            }
+        }
+    }
+    // Sans personne pour servir, le Rush finit par l'effondrement de l'ambiance
+    CHECK(d.ended && d.collapsed);
+    CHECK(d.frame > DAY_DURATION / 4);
+    CHECK(arrivals > 3 && riddles == 0);
+    // Ça accélère avec le temps
+    CHECK(rush_spawn_interval(0) > rush_spawn_interval(5 * 60 * FPS));
+    CHECK(rush_patience(1, 0) > rush_patience(1, 5 * 60 * FPS));
+    CHECK(rush_spawn_interval(60 * 60 * FPS) >= 4 * FPS);
+}
+
+static void test_tween_fx(void)
+{
+    CHECK(ease_in_quad(0) == 0 && ease_in_quad(256) == 256);
+    CHECK(ease_out_quad(0) == 0 && ease_out_quad(256) == 256);
+    CHECK(ease_out_back(0) == 0 && ease_out_back(256) == 256);
+    CHECK(ease_out_bounce(0) == 0 && ease_out_bounce(256) == 256);
+    int peak = 0;
+    for (int t = 0; t <= 256; t++) {
+        int v = ease_out_back(t);
+        if (v > peak)
+            peak = v;
+        CHECK(ease_out_bounce(t) >= 0 && ease_out_bounce(t) <= 256);
+    }
+    CHECK(peak > 256 && peak < 300);   // léger dépassement
+    CHECK(tw_progress(5, 10) == 128 && tw_progress(20, 10) == 256);
+
+    fx_clear();
+    fx_emit(SCREEN_TOP, FX_HEART, 100, 100, 5, 0);
+    CHECK(fx_count() == 5);
+    for (int i = 0; i < 100; i++)
+        fx_update();
+    CHECK(fx_count() == 0);
+    for (int i = 0; i < 200; i++)
+        fx_emit(SCREEN_BOTTOM, FX_SPLASH, 10, 10, 1, 0);
+    CHECK(fx_count() == 64);   // plafonné
+    fx_clear();
 }
 
 static void test_day(void)
@@ -287,6 +399,9 @@ int main(void)
     test_day();
     test_input();
     test_canvas();
+    test_objectives();
+    test_rush();
+    test_tween_fx();
     printf("%d vérifications, %d échec(s)\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

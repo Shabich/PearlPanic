@@ -31,6 +31,10 @@ uint32_t plat_entropy(void) { return 0xC0FFEEu; }
 void plat_sfx(SfxId id) { g_last_sfx = id; }
 void plat_pour_loop(bool on) { (void)on; }
 void plat_music(bool on) { (void)on; }
+void plat_set_volumes(int music, int sfx) { (void)music; (void)sfx; }
+void plat_voice(int pitch_permille) { (void)pitch_permille; }
+void plat_brightness(int level) { (void)level; }
+int plat_frame_load(void) { return 0; }
 void plat_music_tempo(int permille) { (void)permille; }
 
 bool plat_save_read(void *buf, uint32_t size)

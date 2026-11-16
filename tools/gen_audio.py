@@ -159,6 +159,15 @@ def bell():
     return out
 
 
+def blip():
+    """Syllabe de « voix » des clients, jouée à différentes hauteurs."""
+    ph = [0.0]
+    def f(t):
+        ph[0] += (520 + 140 * math.sin(2 * math.pi * 18 * t)) / RATE
+        return (0.7 * tri(ph[0]) + 0.3 * square(ph[0], 0.3)) * env(t, 0.07, 0.004, 0.04)
+    return render(0.07, f)
+
+
 def click():
     return render(0.025, lambda t: square(t * 2000) * env(t, 0.025, 0.001, 0.02) * 0.5)
 
@@ -166,6 +175,6 @@ def click():
 if __name__ == "__main__":
     for name, fn in (("pour", pour), ("plop", plop), ("pump", pump), ("seal", seal),
                      ("shake", shake), ("trash", trash), ("cash", cash), ("happy", happy),
-                     ("angry", angry), ("unlock", unlock), ("bell", bell), ("click", click)):
+                     ("angry", angry), ("unlock", unlock), ("bell", bell), ("click", click), ("blip", blip)):
         save(name, fn())
     print("sfx -> audio/")

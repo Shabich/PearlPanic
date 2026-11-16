@@ -32,7 +32,11 @@ pour le PC, Python 3 + Pillow pour les outils.
   - **Servir** (ou A) donne la boisson au client choisi avec `<` `>` (ou L/R).
 - Les commandes « ??? » sont des **énigmes** : réussir la boisson débloque la recette.
   Certaines recettes secrètes ne se trouvent qu'en expérimentant.
-- START : pause, livre de recettes.
+- Chaque journée a un **objectif** (servir N clients, boissons parfaites…) qui rapporte des pièces.
+- **Mode Rush** (après le jour 1) : pas d'horloge, les clients arrivent de plus en plus vite,
+  la partie s'arrête quand l'ambiance tombe à zéro. Le record est sauvegardé.
+- START : pause, livre de recettes. **Options** depuis le titre : volumes, mode gaucher,
+  effacement de la sauvegarde. SELECT + L : charge du processeur (debug).
 
 ## Architecture
 

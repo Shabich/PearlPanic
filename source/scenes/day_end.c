@@ -15,13 +15,15 @@
 static Watch w_shop;
 static int g_flash_upgrade = -1, g_flash_timer;
 static bool g_collapsed;
+static bool g_rush;
+static bool g_new_record;
 
 static Rect upgrade_rect(int i) { return rect_make(8 + (i & 1) * 124, 26 + (i >> 1) * 52, 116, 46); }
 static Rect next_rect(void) { return rect_make(56, 136, 144, 28); }
 
 static void draw_summary(Surface *s, const Day *d)
 {
-    char buf[64];
+    char buf[96];
     ui_polka_background(s, COL_PINK_PALE, COL_WHITE);
     snprintf(buf, sizeof(buf), "Fin du jour %d", d->number);
     text_draw_shadow(s, (SCREEN_W - text_width(buf, 2)) / 2, 8, buf, COL_PINK_DARK, COL_WHITE, 2);
@@ -46,13 +48,57 @@ static void draw_summary(Surface *s, const Day *d)
     snprintf(buf, sizeof(buf), "Livre de recettes   %d / %d", progress_known_count(), RECIPE_COUNT);
     text_draw(s, 26, y += 13, buf, COL_LAV_DARK, 1);
 
+    if (d->objective.type != OBJ_NONE) {
+        char obj[48];
+        objective_describe(&d->objective, obj, sizeof(obj));
+        if (d->objective_met)
+            snprintf(buf, sizeof(buf), "Objectif réussi : %s (+%d)", obj, d->objective.reward);
+        else
+            snprintf(buf, sizeof(buf), "Objectif manqué : %s", obj);
+        text_draw_aligned(s, 0, 166, SCREEN_W, buf, d->objective_met ? COL_MINT_DARK : COL_INK_SOFT,
+                          ALIGN_CENTER);
+    }
+
     if (d->unlocked_count) {
         int n = 0;
         n += snprintf(buf, sizeof(buf), "Découvert : ");
         for (int i = 0; i < d->unlocked_count && n < (int)sizeof(buf); i++)
             n += snprintf(buf + n, sizeof(buf) - n, "%s%s", i ? ", " : "", RECIPES[d->unlocked[i]].name);
-        text_draw_wrapped(s, 16, 150, 224, buf, COL_LAV_DARK, ALIGN_CENTER);
+        text_draw_wrapped(s, 16, 148, 224, buf, COL_LAV_DARK, ALIGN_CENTER);
     }
+}
+
+static void draw_rush_summary(Surface *s, const Day *d)
+{
+    char buf[64];
+    ui_polka_background(s, COL_PINK_PALE, COL_WHITE);
+    text_draw_shadow(s, (SCREEN_W - text_width("Fin du Rush", 2)) / 2, 10, "Fin du Rush", COL_BAD,
+                     COL_WHITE, 2);
+    draw_round_rect(s, 32, 44, 192, 92, COL_CREAM, COL_WOOD_DARK);
+    uint32_t sec = d->frame / FPS;
+    int y = 52;
+    snprintf(buf, sizeof(buf), "Tenu          %lu:%02lu", (unsigned long)(sec / 60), (unsigned long)(sec % 60));
+    text_draw(s, 44, y, buf, COL_INK, 1);
+    snprintf(buf, sizeof(buf), "Servis        %d (%d parfaits)", d->served, d->perfect);
+    text_draw(s, 44, y += 14, buf, COL_INK, 1);
+    snprintf(buf, sizeof(buf), "Perdus        %d", d->lost);
+    text_draw(s, 44, y += 14, buf, COL_INK, 1);
+    snprintf(buf, sizeof(buf), "Score         %d pièces", d->coins + d->tips);
+    text_draw(s, 44, y += 14, buf, COL_PINK_DARK, 1);
+    snprintf(buf, sizeof(buf), "Record        %lu", (unsigned long)progress()->best_rush);
+    text_draw(s, 44, y += 14, buf, COL_LAV_DARK, 1);
+    if (g_new_record)
+        text_draw_shadow(s, (SCREEN_W - text_width("Nouveau record !", 2)) / 2, 150, "Nouveau record !",
+                         COL_PINK_DARK, COL_YELLOW, 2);
+}
+
+static Rect title_rect(void) { return rect_make(56, 84, 144, 28); }
+
+static void draw_rush_bottom(Surface *s)
+{
+    text_draw_aligned(s, 0, 50, SCREEN_W, "Les pièces du Rush ne comptent pas", COL_INK_SOFT, ALIGN_CENTER);
+    text_draw_aligned(s, 0, 62, SCREEN_W, "dans la partie principale.", COL_INK_SOFT, ALIGN_CENTER);
+    ui_button(s, title_rect(), "Retour au titre", BTN_STYLE_PRIMARY);
 }
 
 static void draw_shop(Surface *s)
@@ -90,8 +136,25 @@ static void day_end_enter(void)
     Day *d = &ss->day;
     Progress *p = progress();
     g_collapsed = d->collapsed;
+    g_rush = d->endless;
+    ui_polka_background(screen_background(SCREEN_BOTTOM), COL_CREAM, COL_CREAM_DARK);
+    screen_set_dynamic(SCREEN_TOP, NULL);
+
+    if (g_rush) {
+        uint32_t score = (uint32_t)(d->coins + d->tips);
+        g_new_record = score > p->best_rush;
+        if (g_new_record)
+            p->best_rush = score;
+        progress_save();
+        draw_rush_summary(screen_background(SCREEN_TOP), d);
+        screen_set_dynamic(SCREEN_BOTTOM, draw_rush_bottom);
+        plat_sfx(g_new_record ? SFX_UNLOCK : SFX_CASH);
+        return;
+    }
 
     int earned = d->coins + d->tips;
+    if (d->objective_met)
+        earned += d->objective.reward;
     p->coins += earned;
     p->total_served += d->served;
     if ((uint32_t)earned > p->best_day_coins)
@@ -101,8 +164,6 @@ static void day_end_enter(void)
     progress_save();
 
     draw_summary(screen_background(SCREEN_TOP), d);
-    screen_set_dynamic(SCREEN_TOP, NULL);
-    ui_polka_background(screen_background(SCREEN_BOTTOM), COL_CREAM, COL_CREAM_DARK);
     screen_set_dynamic(SCREEN_BOTTOM, draw_shop);
     watch_reset(&w_shop);
     plat_sfx(d->collapsed ? SFX_ANGRY : SFX_CASH);
@@ -111,6 +172,14 @@ static void day_end_enter(void)
 static void day_end_update(void)
 {
     const Input *in = input_get();
+    if (scene_transitioning())
+        return;
+    if (g_rush) {
+        Rect t = title_rect();
+        if (input_tapped_in(t.x, t.y, t.w, t.h) || (in->down & (BTN_A | BTN_START)))
+            scene_change(&SCENE_TITLE);
+        return;
+    }
     if (g_flash_timer)
         g_flash_timer--;
     for (int i = 0; i < UPG_COUNT; i++) {

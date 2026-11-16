@@ -7,6 +7,7 @@
 typedef struct {
     Surface bg;
     DynamicDrawFn draw;
+    DynamicDrawFn overlay;
     Rect dirty[MAX_DIRTY];
     int dirty_count;
     bool all_dirty;
@@ -34,6 +35,12 @@ Surface *screen_background(ScreenId id)
 void screen_set_dynamic(ScreenId id, DynamicDrawFn fn)
 {
     g_screens[id].draw = fn;
+    g_screens[id].all_dirty = true;
+}
+
+void screen_set_overlay(ScreenId id, DynamicDrawFn fn)
+{
+    g_screens[id].overlay = fn;
     g_screens[id].all_dirty = true;
 }
 
@@ -65,11 +72,12 @@ void screen_dirty(ScreenId id, Rect r)
 static void compose(Surface *front, ScreenState *s, Rect r)
 {
     surface_copy_rect(front, &s->bg, r);
-    if (s->draw) {
-        front->clip = r;
+    front->clip = r;
+    if (s->draw)
         s->draw(front);
-        surface_reset_clip(front);
-    }
+    if (s->overlay)
+        s->overlay(front);
+    surface_reset_clip(front);
 }
 
 void screen_present(void)

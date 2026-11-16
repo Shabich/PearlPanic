@@ -6,7 +6,7 @@
 #include "plat/plat.h"
 
 #define SAVE_MAGIC   0x50504E43u   // "PPNC"
-#define SAVE_VERSION 1
+#define SAVE_VERSION 2
 
 static Progress g_progress;
 static bool g_has_save;
@@ -27,6 +27,25 @@ void progress_new(void)
     memset(&g_progress, 0, sizeof(g_progress));
     g_progress.day = 1;
     g_progress.known_recipes = 1u << 0;   // le classique est connu d'office
+    g_progress.music_volume = 3;
+    g_progress.sfx_volume = 4;
+}
+
+void progress_new_game(void)
+{
+    Progress keep = g_progress;
+    progress_new();
+    g_progress.music_volume = keep.music_volume;
+    g_progress.sfx_volume = keep.sfx_volume;
+    g_progress.lefty = keep.lefty;
+    g_progress.best_rush = keep.best_rush;
+}
+
+void progress_erase(void)
+{
+    progress_new();
+    progress_save();
+    g_has_save = false;
 }
 
 static void put32(uint8_t *p, uint32_t v)
@@ -59,14 +78,18 @@ void progress_serialize(const Progress *p, uint8_t out[SAVE_SIZE])
     put32(out + 12, p->known_recipes);
     put32(out + 16, p->total_served);
     put32(out + 20, p->best_day_coins);
-    put32(out + 28, checksum(out, 28));
+    out[24] = p->music_volume;
+    out[25] = p->sfx_volume;
+    out[26] = p->lefty ? 1 : 0;
+    put32(out + 28, p->best_rush);
+    put32(out + SAVE_SIZE - 4, checksum(out, SAVE_SIZE - 4));
 }
 
 bool progress_deserialize(Progress *p, const uint8_t in[SAVE_SIZE])
 {
     if (get32(in) != SAVE_MAGIC || in[4] != SAVE_VERSION)
         return false;
-    if (get32(in + 28) != checksum(in, 28))
+    if (get32(in + SAVE_SIZE - 4) != checksum(in, SAVE_SIZE - 4))
         return false;
     p->upgrades = in[5];
     p->day = in[6] | (in[7] << 8);
@@ -74,6 +97,10 @@ bool progress_deserialize(Progress *p, const uint8_t in[SAVE_SIZE])
     p->known_recipes = get32(in + 12) | 1u;
     p->total_served = get32(in + 16);
     p->best_day_coins = get32(in + 20);
+    p->music_volume = in[24] > 4 ? 4 : in[24];
+    p->sfx_volume = in[25] > 4 ? 4 : in[25];
+    p->lefty = in[26] & 1;
+    p->best_rush = get32(in + 28);
     if (p->day == 0)
         p->day = 1;
     return true;

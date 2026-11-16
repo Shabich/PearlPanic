@@ -5,6 +5,7 @@
 
 #include "core/app.h"
 #include "game/progress.h"
+#include "game/recipes.h"
 #include "plat_host.h"
 #include "scenes/scenes.h"
 #include "scenes/shop_draw.h"
@@ -129,8 +130,36 @@ int main(int argc, char **argv)
     frames(2);
     snap("12_pause");
     { Rect r = pause_button_rect(1); tap(r.x + r.w / 2, r.y + r.h / 2); }
-    frames(2);
+    frames(20);
     snap("13_book");
+
+    // Retour en boutique, quitter la journée, options
+    press(BTN_B);
+    frames(20);
+    press(BTN_START);
+    { Rect r = pause_button_rect(2); tap(r.x + r.w / 2, r.y + r.h / 2); }
+    frames(20);
+    snap("14_title_with_save");
+    tap(128, 40 + 3 * 32 + 13);           // Options
+    frames(20);
+    tap(186, 30 + 2 * 30 + 12);           // Mode gaucher
+    tap(234, 30 + 0 * 30 + 12);           // Musique +
+    frames(2);
+    snap("15_options");
+    press(BTN_B);
+    frames(20);
+
+    // Mode Rush (débloqué après le jour 1)
+    progress()->day = 2;
+    progress_learn_recipe(1);
+    progress_learn_recipe(2);
+    tap(128, 40 + 2 * 32 + 13);
+    frames(20 * FPS);
+    snap("16_rush_lefty");
+    for (int i = 0; i < 30 * 60 * FPS && shop_session()->in_progress; i++)
+        frames(1);
+    frames(20);
+    snap("17_rush_end");
     printf("captures écrites dans %s\n", g_dir);
     return 0;
 }

@@ -2,6 +2,8 @@
 #ifndef PP_SHOP_LAYOUT_H
 #define PP_SHOP_LAYOUT_H
 
+#include <stdbool.h>
+
 #include "game/ingredients.h"
 #include "gfx/canvas.h"
 
@@ -56,19 +58,25 @@ static const Ingredient BIN_INGS[BIN_COUNT] = {
     ING_PEARLS, ING_POPPING, ING_JELLY, ING_ICE, ING_CREAM,
 };
 
+// Mode gaucher (tâche 8.5) : colonnes gauche/droite inversées
+extern bool g_layout_lefty;
+static inline void layout_set_lefty(bool on) { g_layout_lefty = on; }
+static inline int col_left_x(void) { return g_layout_lefty ? COL_R_X : COL_L_X; }
+static inline int col_right_x(void) { return g_layout_lefty ? COL_L_X : COL_R_X; }
+
 static inline Rect tap_rect(int i) { return rect_make(TAP_X0 + i * TAP_STEP, TAP_Y, TAP_W, TAP_H); }
 static inline Rect pump_rect(int i) { return rect_make(TAP_X0 + i * TAP_STEP, PUMP_Y, TAP_W, PUMP_H); }
 static inline Rect bin_rect(int i)
 {
     if (i < 4)
-        return rect_make(COL_L_X, ROW_Y0 + i * ROW_STEP, COL_W, ROW_H);
-    return rect_make(COL_R_X, ROW_Y0, COL_W, ROW_H);
+        return rect_make(col_left_x(), ROW_Y0 + i * ROW_STEP, COL_W, ROW_H);
+    return rect_make(col_right_x(), ROW_Y0, COL_W, ROW_H);
 }
 
 typedef enum { ACT_SEAL, ACT_TRASH, ACT_SERVE, ACT_COUNT } StationAction;
 static inline Rect action_rect(int a)
 {
-    return rect_make(COL_R_X, ROW_Y0 + (a + 1) * ROW_STEP, COL_W, ROW_H);
+    return rect_make(col_right_x(), ROW_Y0 + (a + 1) * ROW_STEP, COL_W, ROW_H);
 }
 
 static inline Rect sel_prev_rect(void) { return rect_make(SEL_X, SEL_Y, 20, SEL_H); }

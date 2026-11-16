@@ -20,7 +20,7 @@ typedef struct {
     int wobble;
     bool paused;
     int end_timer;
-    char toast1[48], toast2[64];
+    char toast1[48], toast2[96];
     uint16_t toast_color;
     int toast_timer;
     int toast_id;

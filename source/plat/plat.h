@@ -60,6 +60,15 @@ void plat_sfx(SfxId id);
 void plat_pour_loop(bool on);         // son continu pendant le versement
 void plat_music(bool on);             // musique de la boutique (tâche 7.2)
 void plat_music_tempo(int permille);  // 1000 = normal ; plus rapide quand ça stresse
+// Volumes 0..4 (tâche 8.5)
+void plat_set_volumes(int music, int sfx);
+// « Voix » d'un client : petit blip à une hauteur donnée (tâche 7.4)
+void plat_voice(int pitch_permille);
+
+// Luminosité des deux écrans : 0 = normal, 16 = blanc (tâche 1.10)
+void plat_brightness(int level);
+// Part de la frame utilisée par le calcul, en % (overlay de debug, tâche 1.12)
+int plat_frame_load(void);
 
 // Sauvegarde (tâche 6.5) ; renvoie false si indisponible
 bool plat_save_read(void *buf, uint32_t size);

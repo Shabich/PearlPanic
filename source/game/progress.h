@@ -26,12 +26,19 @@ typedef struct {
     uint8_t upgrades;          // bit i = amélioration i achetée
     uint32_t total_served;
     uint32_t best_day_coins;
+    uint32_t best_rush;        // meilleur score du mode Rush (tâche 6.7)
+    // Réglages (tâche 8.5), conservés quand on recommence une partie
+    uint8_t music_volume;      // 0..4
+    uint8_t sfx_volume;        // 0..4
+    bool lefty;                // poste d'assemblage en miroir
 } Progress;
 
 Progress *progress(void);
 const UpgradeInfo *upgrade_info(Upgrade u);
 
-void progress_new(void);
+void progress_new(void);          // remise à zéro complète (réglages par défaut)
+void progress_new_game(void);     // nouvelle partie : garde réglages et record Rush
+void progress_erase(void);        // efface la sauvegarde (réglages compris)
 bool progress_load(void);      // false = aucune sauvegarde valide (nouvelle partie)
 void progress_save(void);
 bool progress_has_save(void);
@@ -44,7 +51,7 @@ bool progress_has_upgrade(Upgrade u);
 bool progress_buy_upgrade(Upgrade u);   // false si déjà acheté ou trop cher
 
 // Sérialisation (testable sans plateforme)
-#define SAVE_SIZE 32
+#define SAVE_SIZE 48
 void progress_serialize(const Progress *p, uint8_t out[SAVE_SIZE]);
 bool progress_deserialize(Progress *p, const uint8_t in[SAVE_SIZE]);
 

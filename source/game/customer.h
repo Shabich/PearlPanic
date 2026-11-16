@@ -9,6 +9,7 @@ typedef struct {
     uint8_t patience_pct;    // 100 = normal
     uint8_t tip;             // pourboire de base si boisson excellente
     uint8_t picky;           // score minimal pour être content
+    uint16_t voice;          // hauteur de la voix (‰, 1000 = normal)
 } CustomerType;
 
 typedef enum {

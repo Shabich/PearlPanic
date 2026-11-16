@@ -9,6 +9,7 @@
 #include "core/rng.h"
 #include "game/customer.h"
 #include "game/drink.h"
+#include "game/objectives.h"
 
 #define FPS              60
 #define DAY_SLOTS        3
@@ -66,8 +67,11 @@ typedef struct {
     const char *hint;     // pourquoi ce n'était pas parfait (NULL si parfait)
 } ServeResult;
 
-typedef struct {
+typedef struct Day {
     int number;
+    bool endless;         // mode Rush : pas d'horloge, finit quand l'ambiance tombe à 0
+    Objective objective;  // objectif du jour (OBJ_NONE en mode Rush)
+    bool objective_met;   // calculé en fin de journée
     uint32_t frame;
     int32_t spawn_timer;
     int ambiance;
@@ -87,6 +91,8 @@ typedef struct {
 } Day;
 
 void day_start(Day *d, int number, uint32_t seed);
+// Mode Rush (tâche 6.7) : recettes connues uniquement, cadence qui accélère
+void day_start_rush(Day *d, int number, uint32_t seed);
 
 // Avance d'une frame. Les événements de la frame sont dans d->events.
 void day_update(Day *d);
@@ -107,5 +113,9 @@ int day_spawn_interval(int number);
 int day_base_patience(int number);
 
 uint32_t day_time_left(const Day *d);
+
+// Mode Rush : intervalle d'arrivée et patience selon le temps écoulé
+int rush_spawn_interval(uint32_t frame);
+int rush_patience(int number, uint32_t frame);
 
 #endif

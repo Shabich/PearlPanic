@@ -28,11 +28,11 @@ Les dépendances sont notées `→ dépend de`.
 
 ## 0. Mise en place du projet
 
-- [ ] **0.1 [P0]** Installer la toolchain (BlocksDS ou devkitARM) et vérifier qu’un « hello world » tourne sur melonDS. *(BlocksDS via Docker OK, la ROM compile ; reste à la lancer dans melonDS)*
+- [x] **0.1 [P0]** Installer la toolchain (BlocksDS ou devkitARM) et vérifier qu’un « hello world » tourne sur melonDS. *(BlocksDS via Docker, validé dans melonDS)*
 - [x] **0.2 [P0]** Créer l'arborescence : `source/`, `include/`, `gfx/`, `audio/`, `data/`, `tools/`.
 - [x] **0.3 [P0]** Makefile : compilation `.nds`, conversion auto des PNG via **grit**, de l'audio via **mmutil**. → 0.1 *(grit remplacé par `tools/png2c.py` : les images sont dessinées en logiciel, cf. 1.6)*
 - [x] **0.4 [P0]** Bannière/icône de la ROM (32×32) et titre. → 0.3
-- [ ] **0.5 [P1]** Script `make run` qui lance melonDS sur la ROM. *(cible écrite, à valider une fois melonDS installé)*
+- [x] **0.5 [P1]** Script `make run` qui lance melonDS sur la ROM.
 - [x] **0.6 [P1]** CI GitHub Actions (image Docker BlocksDS) qui compile la ROM à chaque push.
 - [x] **0.7 [P1]** Conventions de code : préfixes de modules (`gfx_`, `snd_`, `cust_`…), `clang-format`, pas d'allocation dynamique dans la boucle de jeu. *(voir README)*
 
@@ -46,10 +46,10 @@ Les dépendances sont notées `→ dépend de`.
 - [x] **1.6 [P0]** Gestionnaire de fonds : chargement tilemaps + palettes, scrolling. → 1.4 *(fonds bitmap 16 bits + recomposition des zones modifiées)*
 - [ ] **1.7 [P1]** Animation de sprites (frames, durée, boucle / one-shot). → 1.5
 - [x] **1.8 [P1]** Rendu de texte : police bitmap pixel art 8×8 (ou 8×16), accents français. → 1.6 *(police 6×11 Latin-1 provisoire, issue de Pillow)*
-- [ ] **1.9 [P1]** Tweens/easing (déplacement, rebond, scale via affine) pour le « juice ». → 1.5
-- [ ] **1.10 [P1]** Transitions de scène (fondu via registres de luminosité `REG_MASTER_BRIGHT`). → 1.2
+- [x] **1.9 [P1]** Tweens/easing (déplacement, rebond, scale via affine) pour le « juice ». → 1.5 *(`core/tween.h` : arrivée des clients qui rebondit, départs, pièces)*
+- [x] **1.10 [P1]** Transitions de scène (fondu via registres de luminosité `REG_MASTER_BRIGHT`). → 1.2 *(fondu au blanc via `setBrightness`, 8 frames)*
 - [x] **1.11 [P1]** Générateur pseudo-aléatoire (xorshift) avec graine.
-- [ ] **1.12 [P2]** Overlay de debug (FPS, nb sprites, mémoire libre) activable avec Select+L.
+- [x] **1.12 [P2]** Overlay de debug (FPS, nb sprites, mémoire libre) activable avec Select+L. *(SELECT + L : charge CPU)*
 
 ## 2. Direction artistique & assets
 
@@ -62,7 +62,7 @@ Les dépendances sont notées `→ dépend de`.
 - [ ] **2.7 [P1]** Clients : 6–10 personnages chibi (animaux / créatures), chacun avec animations idle, entrée, attente, stress (3 niveaux), content, furieux, départ. *(placeholder en place, art final à faire)*
 - [ ] **2.8 [P1]** UI : bulles de commande, jauge de stress, pièces, icônes, boutons tactiles. *(placeholder en place, art final à faire)*
 - [ ] **2.9 [P1]** Écran titre + logo « Pearl Panic ». *(placeholder en place, art final à faire)*
-- [ ] **2.10 [P2]** Effets : particules (cœurs, étoiles, gouttes, fumée de colère).
+- [x] **2.10 [P2]** Effets : particules (cœurs, étoiles, gouttes, fumée de colère). *(`scenes/fx.c` : cœurs, étoiles, pièces, sueur, fumée, éclaboussures)*
 - [x] **2.11 [P0]** Pipeline : fichiers `.grit` par asset, nommage cohérent, vérification du budget VRAM. → 0.3 *(PNG → C via `make assets`)*
 
 ## 3. Poste d'assemblage (cœur du gameplay, écran bas)
@@ -111,15 +111,15 @@ Les dépendances sont notées `→ dépend de`.
 - [x] **6.3 [P1]** Boutique d'améliorations : nouveaux ingrédients, tireuse plus rapide, décorations (+patience / +ambiance). → 6.2 *(4 améliorations ; les nouveaux ingrédients arrivent par jour)*
 - [x] **6.4 [P1]** Courbe de difficulté : patience plus faible, plus de clients, commandes plus complexes au fil des jours.
 - [x] **6.5 [P1]** Sauvegarde : jour, argent, recettes débloquées, améliorations. Via libfat/NitroFS sur SD (linker) ; prévoir abstraction `save_read/save_write`. → 1.1 *(fichier `pearlpanic.sav` via libfat ; à valider sur linker)*
-- [ ] **6.6 [P2]** Objectifs quotidiens / succès.
-- [ ] **6.7 [P2]** Mode infini « Rush » avec score.
+- [x] **6.6 [P2]** Objectifs quotidiens / succès. *(un objectif par jour, bonus de pièces)*
+- [x] **6.7 [P2]** Mode infini « Rush » avec score. *(débloqué après le jour 1, record sauvegardé)*
 
 ## 7. Audio
 
 - [x] **7.1 [P1]** Intégration maxmod (soundbank générée par mmutil). → 0.3
 - [x] **7.2 [P1]** Musique lo-fi / cozy pour la boutique, variante plus rapide quand l'ambiance chute. *(boucle MOD générée par `tools/gen_music.py`, à remplacer par une vraie compo)*
 - [x] **7.3 [P1]** SFX : versement, perles, shaker, scellage, caisse, client content, client fâché, déblocage de recette. *(sons synthétisés par `tools/gen_audio.py`, placeholders)*
-- [ ] **7.4 [P2]** Voix « blips » mignonnes par type de client.
+- [x] **7.4 [P2]** Voix « blips » mignonnes par type de client. *(un blip joué à une hauteur différente par espèce)*
 
 ## 8. UI & menus
 
@@ -127,7 +127,7 @@ Les dépendances sont notées `→ dépend de`.
 - [x] **8.2 [P1]** Menu pause (Start) : reprendre, livre de recettes, quitter. → 1.2
 - [x] **8.3 [P1]** HUD : argent, horloge de la journée, ambiance. → 1.8
 - [x] **8.4 [P1]** Tutoriel guidé du premier jour (première commande pas à pas). → 3.x, 4.x
-- [ ] **8.5 [P2]** Options : volume musique/SFX, gaucher (miroir de l'écran bas), effacer la sauvegarde.
+- [x] **8.5 [P2]** Options : volume musique/SFX, gaucher (miroir de l'écran bas), effacer la sauvegarde. *(volumes, mode gaucher, effacement en deux appuis)*
 
 ## 9. Tests, perf & finalisation
 
@@ -159,7 +159,8 @@ et `scenes/` ne dépendent **pas** de libnds → tout le jeu tourne aussi sur PC
 
 ## Reste à faire en priorité
 
-1. Lancer la ROM dans melonDS puis sur vraie DS (0.1, 0.5, 9.2, 9.3) : perfs du rendu logiciel, tactile.
-2. Playtest et équilibrage (9.4) : patience, vitesse de l'ambiance, prix.
-3. Art final (2.x) en remplaçant les PNG de `gfx/` ; vraie musique (7.2).
-4. Polish : transitions (1.10), tweens (1.9), particules (2.10), options (8.5).
+1. Test sur vraie DS (9.2, 9.3) : fluidité du rendu logiciel, précision du stylet, sauvegarde sur linker.
+2. Playtest et équilibrage (9.4) : patience, vitesse de l'ambiance, prix, objectifs, cadence du Rush.
+3. Art final (2.x) en remplaçant les PNG de `gfx/` ; vraie musique (7.2) et vrais sons (7.3).
+4. Restent en P2 : 1.7 (animations image par image, avec l'art final), 3.12 (deux gobelets),
+   4.10 (clients spéciaux), 9.5 (DSi/3DS), 9.6 (release).

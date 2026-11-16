@@ -27,6 +27,8 @@ static bool g_pour_on;
 static int g_pour_timer;
 static bool g_music_on;
 static uint32_t g_frame;
+static int g_music_volume = 4;
+static int g_load;
 
 static const mm_word SFX_MAP[SFX_COUNT] = {
     [SFX_POUR]   = SFX_SND_POUR,
@@ -60,6 +62,7 @@ void plat_init(void)
     mmInitDefaultMem((mm_addr)soundbank_bin);
     for (int i = 0; i < SFX_COUNT; i++)
         mmLoadEffect(SFX_MAP[i]);
+    mmLoadEffect(SFX_SND_BLIP);
     mmLoad(MOD_MUSIC_SHOP);
 
     g_fat_ok = fatInitDefault();
@@ -88,6 +91,9 @@ void plat_poll(RawInput *in)
 
 void plat_wait_vblank(void)
 {
+    // Le calcul de la frame commence au début du VBlank (ligne 192)
+    int line = REG_VCOUNT;
+    g_load = ((line - 192 + 263) % 263) * 100 / 263;
     swiWaitForVBlank();
     g_frame++;
     if (g_pour_on && --g_pour_timer <= 0) {
@@ -121,7 +127,7 @@ void plat_music(bool on)
     g_music_on = on;
     if (on) {
         mmStart(MOD_MUSIC_SHOP, MM_PLAY_LOOP);
-        mmSetModuleVolume(700);
+        mmSetModuleVolume(g_music_volume * 180);
     } else {
         mmStop();
     }
@@ -132,6 +138,35 @@ void plat_music_tempo(int permille)
     // maxmod : 1024 = tempo normal (plage 512..2048)
     int t = 1024 * permille / 1000;
     mmSetModuleTempo(t < 512 ? 512 : t > 2048 ? 2048 : t);
+}
+
+void plat_set_volumes(int music, int sfx)
+{
+    g_music_volume = music;
+    mmSetModuleVolume(music * 180);
+    mmSetEffectsVolume(sfx * 256);
+}
+
+void plat_voice(int pitch_permille)
+{
+    mm_sound_effect fx = {
+        .id = SFX_SND_BLIP,
+        .rate = (mm_hword)(1024 * pitch_permille / 1000),
+        .handle = 0,
+        .volume = 200,
+        .panning = 128,
+    };
+    mmEffectEx(&fx);
+}
+
+void plat_brightness(int level)
+{
+    setBrightness(3, level);
+}
+
+int plat_frame_load(void)
+{
+    return g_load;
 }
 
 bool plat_save_read(void *buf, uint32_t size)

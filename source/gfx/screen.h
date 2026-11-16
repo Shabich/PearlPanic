@@ -22,6 +22,9 @@ Surface *screen_background(ScreenId id);
 // Fonction de dessin de la couche dynamique (NULL = aucune)
 void screen_set_dynamic(ScreenId id, DynamicDrawFn fn);
 
+// Couche dessinée par-dessus tout (overlay de debug), indépendante des scènes
+void screen_set_overlay(ScreenId id, DynamicDrawFn fn);
+
 // Marque une zone à recomposer
 void screen_dirty(ScreenId id, Rect r);
 void screen_dirty_all(ScreenId id);

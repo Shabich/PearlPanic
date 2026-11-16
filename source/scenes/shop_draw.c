@@ -10,10 +10,13 @@
 #include "gen/assets.h"
 #include "gfx/font.h"
 #include "gfx/palette.h"
+#include "core/tween.h"
+#include "scenes/fx.h"
 #include "scenes/shop_layout.h"
 #include "scenes/ui.h"
 
 static const ShopView *V;
+bool g_layout_lefty;
 
 static bool visible(const Surface *s, Rect r)
 {
@@ -387,7 +390,7 @@ static void draw_actions(Surface *s)
 
 Rect pause_button_rect(int i)
 {
-    return rect_make(64, 70 + i * 30, 128, 24);
+    return rect_make(64, 66 + i * 27, 128, 24);
 }
 
 static void draw_pause(Surface *s)
@@ -398,6 +401,14 @@ static void draw_pause(Surface *s)
     static const char *const LABELS[PAUSE_BUTTONS] = { "Reprendre", "Livre de recettes", "Quitter la journée" };
     for (int i = 0; i < PAUSE_BUTTONS; i++)
         ui_button(s, pause_button_rect(i), LABELS[i], i == 0 ? BTN_STYLE_PRIMARY : BTN_STYLE_NORMAL);
+    const Day *d = &V->session->day;
+    if (d->objective.type != OBJ_NONE) {
+        char obj[48], line[64];
+        objective_describe(&d->objective, obj, sizeof(obj));
+        snprintf(line, sizeof(line), "%s (%d/%d)", obj, objective_value(&d->objective, d),
+                 d->objective.type == OBJ_NO_LOSS ? 0 : d->objective.target);
+        text_draw_aligned(s, 42, 149, 172, line, COL_INK_SOFT, ALIGN_CENTER);
+    }
 }
 
 void shop_draw_bottom(Surface *s)
@@ -420,6 +431,7 @@ void shop_draw_bottom(Surface *s)
         const Input *in = input_get();
         draw_image(s, topping_icon(V->held), in->x - 8, in->y - 8);
     }
+    fx_draw(SCREEN_BOTTOM, s);
     if (V->paused)
         draw_pause(s);
 }
@@ -446,7 +458,8 @@ static void customer_offset(const ShopView *v, int slot, int *dx, int *dy)
     *dy = 0;
     switch (c->state) {
     case CS_ARRIVING:
-        *dy = (ARRIVE_FRAMES - c->anim) * 48 / ARRIVE_FRAMES;
+        // Surgit de derrière le comptoir avec un petit dépassement (tâche 1.9)
+        *dy = tw_lerp(48, 0, ease_out_back(tw_progress(c->anim, ARRIVE_FRAMES)));
         break;
     case CS_WAITING: {
         int level = day_stress_level(c);
@@ -464,7 +477,7 @@ static void customer_offset(const ShopView *v, int slot, int *dx, int *dy)
             else
                 *dx = (c->anim & 2) ? 2 : -2;
         } else {
-            *dy = (c->anim - 16) * 52 / (LEAVE_FRAMES - 16);
+            *dy = tw_lerp(0, 52, ease_in_quad(tw_progress(c->anim - 16, LEAVE_FRAMES - 16)));
         }
         break;
     default:
@@ -541,7 +554,7 @@ static void draw_slot(Surface *s, int i)
     if (V->coin_popup_slot == i && V->coin_popup_timer > 0 && V->coin_popup > 0) {
         char txt[12];
         snprintf(txt, sizeof(txt), "+%d", V->coin_popup);
-        int y = CUSTOMER_Y + 4 - (60 - V->coin_popup_timer) / 3;
+        int y = CUSTOMER_Y + 4 - tw_lerp(0, 22, ease_out_quad(tw_progress(60 - V->coin_popup_timer, 40)));
         draw_image(s, &IMG_icons_coin, cx + 6, y);
         text_draw_shadow(s, cx + 23, y + 3, txt, COL_YELLOW, COL_INK, 1);
     }
@@ -556,16 +569,19 @@ static void draw_hud(Surface *s)
     char buf[24];
     draw_rect(s, 0, 0, SCREEN_W, HUD_H, COL_PINK);
     draw_hline(s, 0, HUD_H - 1, SCREEN_W, COL_PINK_DARK);
-    snprintf(buf, sizeof(buf), "Jour %d", d->number);
-    text_draw(s, 4, 3, buf, COL_INK, 1);
+    if (d->endless)
+        snprintf(buf, sizeof(buf), "RUSH");
+    else
+        snprintf(buf, sizeof(buf), "Jour %d", d->number);
+    text_draw(s, 4, 3, buf, d->endless ? COL_BAD : COL_INK, 1);
 
     draw_image(s, &IMG_icons_heart, 54, 0);
     int amb = 256 * d->ambiance / AMBIANCE_MAX;
     ui_gauge(s, 72, 4, 70, 8, d->ambiance, AMBIANCE_MAX, ui_patience_color(amb));
 
-    uint32_t left = (day_time_left(d) + FPS - 1) / FPS;
+    uint32_t left = d->endless ? d->frame / FPS : (day_time_left(d) + FPS - 1) / FPS;
     snprintf(buf, sizeof(buf), "%lu:%02lu", (unsigned long)(left / 60), (unsigned long)(left % 60));
-    text_draw(s, 154, 3, buf, left <= 15 ? COL_BAD : COL_INK, 1);
+    text_draw(s, 154, 3, buf, !d->endless && left <= 15 ? COL_BAD : COL_INK, 1);
 
     draw_image(s, &IMG_icons_coin, 200, 0);
     snprintf(buf, sizeof(buf), "%d", d->coins + d->tips);
@@ -592,7 +608,13 @@ static void draw_panel(Surface *s)
         const char *msg = d->ended ? "La boutique ferme…"
                           : day_time_left(d) == 0 ? "Plus de clients, on range !"
                                                   : "En attente de clients…";
-        text_draw_aligned(s, x, y + 22, w, msg, COL_INK_SOFT, ALIGN_CENTER);
+        text_draw_aligned(s, x, y + 14, w, msg, COL_INK_SOFT, ALIGN_CENTER);
+        if (d->objective.type != OBJ_NONE) {
+            char obj[48], line2[72];
+            objective_describe(&d->objective, obj, sizeof(obj));
+            snprintf(line2, sizeof(line2), "Objectif : %s", obj);
+            text_draw_aligned(s, x, y + 30, w, line2, COL_PINK_DARK, ALIGN_CENTER);
+        }
         return;
     }
 
@@ -623,6 +645,7 @@ void shop_draw_top(Surface *s)
     for (int i = 0; i < DAY_SLOTS; i++)
         draw_slot(s, i);
     draw_panel(s);
+    fx_draw(SCREEN_TOP, s);
 }
 
 // ================================================================ Fonds statiques

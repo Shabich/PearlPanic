@@ -24,7 +24,21 @@ int day_base_patience(int n)
 
 uint32_t day_time_left(const Day *d)
 {
+    if (d->endless)
+        return DAY_DURATION;
     return d->frame >= DAY_DURATION ? 0 : DAY_DURATION - d->frame;
+}
+
+int rush_spawn_interval(uint32_t frame)
+{
+    int s = 11 - (int)(frame / (30 * FPS));   // -1 s toutes les 30 s
+    return (s < 4 ? 4 : s) * FPS;
+}
+
+int rush_patience(int number, uint32_t frame)
+{
+    int p = day_base_patience(number) - (int)(frame / (30 * FPS)) * 2 * FPS;
+    return p < 14 * FPS ? 14 * FPS : p;
 }
 
 static void push_event(Day *d, DayEventType t, int slot, int value)
@@ -43,6 +57,19 @@ void day_start(Day *d, int number, uint32_t seed)
     rng_seed(&d->rng, seed);
     for (int i = 0; i < DAY_SLOTS; i++)
         d->slots[i].last_score = -1;
+
+    bool can_discover = false;
+    for (int i = 0; i < RECIPE_COUNT; i++)
+        if (!RECIPES[i].secret && RECIPES[i].day <= d->number && !progress_recipe_known(i))
+            can_discover = true;
+    d->objective = objective_for_day(d->number, can_discover);
+}
+
+void day_start_rush(Day *d, int number, uint32_t seed)
+{
+    day_start(d, number, seed);
+    d->endless = true;
+    d->objective.type = OBJ_NONE;
 }
 
 int day_stress_level(const Customer *c)
@@ -72,6 +99,11 @@ static int pick_recipe(Day *d, bool *riddle)
             secret[ns++] = i;
         else
             unknown[nu++] = i;
+    }
+    // Mode Rush : uniquement des recettes connues, en clair
+    if (d->endless) {
+        *riddle = false;
+        return nk ? known[rng_range(&d->rng, nk)] : 0;
     }
     // Tout premier client du jeu : le classique, en clair (tutoriel)
     if (d->number == 1 && d->next_seq == 0) {
@@ -108,7 +140,7 @@ static void spawn(Day *d)
         else if (free_slot < 0 || rng_range(&d->rng, 2))
             free_slot = i;
     }
-    if (free_slot < 0 || count >= day_max_customers(d->number))
+    if (free_slot < 0 || count >= (d->endless ? DAY_SLOTS : day_max_customers(d->number)))
         return;
 
     Customer *c = &d->slots[free_slot];
@@ -119,7 +151,7 @@ static void spawn(Day *d)
     c->seq = d->next_seq++;
     c->last_score = -1;
 
-    int32_t p = day_base_patience(d->number);
+    int32_t p = d->endless ? rush_patience(d->number, d->frame) : day_base_patience(d->number);
     p += recipe_complexity(c->recipe) * 2 * FPS;
     if (c->riddle)
         p += 10 * FPS;
@@ -194,7 +226,7 @@ void day_update(Day *d)
     if (day_time_left(d) > 15 * FPS) {
         if (--d->spawn_timer <= 0) {
             spawn(d);
-            int base = day_spawn_interval(d->number);
+            int base = d->endless ? rush_spawn_interval(d->frame) : day_spawn_interval(d->number);
             d->spawn_timer = base - base / 4 + rng_range(&d->rng, base / 2 + 1);
         }
     }
@@ -258,10 +290,12 @@ void day_update(Day *d)
     if (d->ambiance <= 0) {
         d->ended = true;
         d->collapsed = true;
-        push_event(d, EV_DAY_END, -1, 1);
-    } else if (day_time_left(d) == 0 && !anyone_present(d)) {
+    } else if (!d->endless && day_time_left(d) == 0 && !anyone_present(d)) {
         d->ended = true;
-        push_event(d, EV_DAY_END, -1, 0);
+    }
+    if (d->ended) {
+        d->objective_met = objective_done(&d->objective, d);
+        push_event(d, EV_DAY_END, -1, d->collapsed);
     }
 }
 
