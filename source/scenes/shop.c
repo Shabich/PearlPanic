@@ -12,6 +12,7 @@
 #include "gfx/palette.h"
 #include "gfx/screen.h"
 #include "plat/plat.h"
+#include "scenes/decor.h"
 #include "scenes/fx.h"
 #include "scenes/scenes.h"
 #include "scenes/shop_draw.h"
@@ -47,11 +48,8 @@ void shop_begin_rush(void)
     g_rush_requested = true;
 }
 
-// Hauteur de la surface du liquide dans le gobelet (pour les éclaboussures)
-static int cup_surface_y(void)
-{
-    return CUP_BOT_Y - session_drink(&g_session)->liquid_total * (CUP_BOT_Y - CUP_TOP_Y) / CUP_CAPACITY;
-}
+// Hauteur de la surface du liquide du gobelet actif (pour les éclaboussures)
+static int active_surface_y(void) { return cup_surface_y(session_drink(&g_session), 0); }
 
 static int customer_head_x(int slot) { return slot_cx(slot); }
 
@@ -114,6 +112,8 @@ static void shop_enter(void)
         g_view.pouring = -1;
         g_view.held = ING_NONE;
         fx_clear();
+        cup_anim_reset(&g_view.cup_anim[0]);
+        cup_anim_reset(&g_view.cup_anim[1]);
         char l1[48], l2[96];
         if (g_session.day.endless) {
             toast("Mode Rush !", "Tiens le plus longtemps possible : ça va accélérer…", COL_BAD);
@@ -290,7 +290,7 @@ static void update_station(const Input *in)
         if (drink->overflowed && (g_view.frame & 3) == 0)
             fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx() + ((g_view.frame & 4) ? 30 : -30), CUP_TOP_Y - 6, 1, col);
         else if ((g_view.frame & 7) == 0)
-            fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), cup_surface_y(), 1, col);
+            fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), active_surface_y(), 1, col);
     } else {
         pouring = -1;
     }
@@ -307,7 +307,7 @@ static void update_station(const Input *in)
             if (drink_add(drink, PUMP_INGS[i])) {
                 g_view.pump_flash[i] = 8;
                 plat_sfx(SFX_PUMP);
-                fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), cup_surface_y(), 3, ing_info(PUMP_INGS[i])->color);
+                fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), active_surface_y(), 3, ing_info(PUMP_INGS[i])->color);
             }
         }
     }
@@ -332,7 +332,7 @@ static void update_station(const Input *in)
         if ((target >= 0 || tapped) && drink_add(drink, g_view.held)) {
             plat_sfx(SFX_PLOP);
             uint16_t col = drink->liquid_total ? drink_mixed_color(drink) : ing_info(g_view.held)->color;
-            fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), cup_surface_y(), 4, col);
+            fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), active_surface_y(), 4, col);
         }
         g_view.held = ING_NONE;
     }
@@ -411,6 +411,7 @@ static void handle_events(int first)
             break;
         }
         case EV_STRESS_UP:
+            g_view.jolt[e->slot] = 8;
             if (e->value >= 2)
                 fx_emit(SCREEN_TOP, FX_SWEAT, customer_head_x(e->slot) + 14, CUSTOMER_HEAD_Y - 10, 2, 0);
             if (e->value == 3)
@@ -473,18 +474,56 @@ static void shop_update(void)
     // La musique s'emballe quand l'ambiance chute (tâche 7.2)
     plat_music_tempo(d->ambiance < AMBIANCE_MAX * 3 / 10 ? 1150 : 1000);
 
-    if (!g_view.paused)
+    decor_shop_dirty(g_view.frame);
+    if (!g_view.paused) {
         fx_update();
+        for (int i = 0; i < DAY_SLOTS; i++)
+            if (g_view.jolt[i])
+                g_view.jolt[i]--;
+        // Clients qui marchent : toute la bande du comptoir est redessinée
+        // (et encore 2 frames après, pour effacer la dernière position)
+        static int band_timer;
+        for (int i = 0; i < DAY_SLOTS; i++) {
+            CustomerState st = d->slots[i].state;
+            if (st == CS_ARRIVING || (st == CS_LEAVING && d->slots[i].anim >= 16))
+                band_timer = 3;
+        }
+        if (band_timer > 0) {
+            band_timer--;
+            screen_dirty(SCREEN_TOP, rect_make(0, CUSTOMER_Y - 16, SCREEN_W, COUNTER_Y - CUSTOMER_Y + 16));
+        }
+        for (int i = 0; i < g_session.cup_count; i++) {
+            bool pouring = g_view.pouring >= 0 && i == g_session.active_cup;
+            cup_anim_update(&g_view.cup_anim[i], &g_session.cups[i], pouring,
+                            i == g_session.active_cup ? g_view.wobble : 0, g_view.frame);
+        }
+    }
     if (g_view.toast_timer > 0)
         g_view.toast_timer--;
     if (g_view.coin_popup_timer > 0)
         g_view.coin_popup_timer--;
 
+    // Le compteur de pièces défile jusqu'au total
+    int total = d->coins + d->tips;
+    if (g_view.coins_shown != total && (g_view.frame & 1) == 0)
+        g_view.coins_shown += g_view.coins_shown < total ? 1 : -1;
+
+    // Machine à écrire du ticket : repart de zéro quand le contenu change
+    uint32_t key = g_view.toast_timer > 0 ? 0x80000000u | (uint32_t)g_view.toast_id
+                 : d->active >= 0 ? 0x40000000u | d->slots[d->active].seq : 0;
+    if (key != g_view.panel_key) {
+        g_view.panel_key = key;
+        g_view.panel_since = g_view.frame;
+    }
+    int reveal = (int)(g_view.frame - g_view.panel_since) * 2;
+    g_view.panel_reveal = reveal > 200 ? -1 : reveal;
+
     // ---- Zones à redessiner (écran haut)
     uint32_t h = hash_begin();
     h = hash_add(h, (int32_t)(d->endless ? d->frame / FPS : day_time_left(d) / FPS));
-    h = hash_add(h, d->coins + d->tips);
+    h = hash_add(h, g_view.coins_shown);
     h = hash_add(h, d->ambiance / 10);
+    h = hash_add(h, (int32_t)(g_view.frame / 10));   // cœur qui bat, horloge qui pulse
     watch(SCREEN_TOP, &w_hud, rect_make(0, 0, SCREEN_W, HUD_H), h);
 
     for (int i = 0; i < DAY_SLOTS; i++)
@@ -496,22 +535,27 @@ static void shop_update(void)
     h = hash_add(h, d->active >= 0 ? d->slots[d->active].seq : -1);
     h = hash_add(h, g_view.toast_timer > 0 ? g_view.toast_id : -1);
     h = hash_add(h, (int32_t)shop_tutorial_hash(&g_view));
+    h = hash_add(h, g_view.panel_reveal);
     h = hash_add(h, d->ended);
     watch(SCREEN_TOP, &w_panel, rect_make(0, COUNTER_Y, SCREEN_W, SCREEN_H - COUNTER_Y), h);
 
     // ---- Zones à redessiner (écran bas)
-    watch(SCREEN_BOTTOM, &w_taps, rect_make(0, 0, SCREEN_W, PUMP_Y), hash_add(hash_begin(), g_view.pouring));
+    h = hash_add(hash_begin(), g_view.pouring);
+    h = hash_add(h, g_view.pouring >= 0 ? (int32_t)(g_view.frame / 2) : 0);
+    watch(SCREEN_BOTTOM, &w_taps, rect_make(0, 0, SCREEN_W, PUMP_Y), h);
     h = hash_begin();
     for (int i = 0; i < PUMP_COUNT; i++)
-        h = hash_add(h, g_view.pump_flash[i] > 0);
+        h = hash_add(h, g_view.pump_flash[i]);
     watch(SCREEN_BOTTOM, &w_pumps, rect_make(0, PUMP_Y, SEL_X, PUMP_H + 2), h);
 
     h = hash_add(hash_begin(), d->active);
     h = hash_add(h, d->active >= 0 ? d->slots[d->active].type : -1);
+    h = hash_add(h, (int32_t)(g_view.frame / 15));
     watch(SCREEN_BOTTOM, &w_sel, rect_make(SEL_X, SEL_Y, SEL_W, PUMP_H + 2), h);
 
     h = hash_add(hash_begin(), g_view.held);
     h = hash_add(h, session_drink(&g_session)->sealed);
+    h = hash_add(h, g_view.held != ING_NONE ? (int32_t)(g_view.frame / 4) : 0);
     watch(SCREEN_BOTTOM, &w_bins, rect_make(col_left_x() - 4, ROW_Y0, COL_W + 8, SCREEN_H - ROW_Y0), h);
 
     h = hash_add(hash_begin(), shop_actions_hash(&g_view));

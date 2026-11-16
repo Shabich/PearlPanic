@@ -7,6 +7,7 @@
 #include "gfx/palette.h"
 #include "gfx/screen.h"
 #include "plat/plat.h"
+#include "scenes/decor.h"
 #include "scenes/scenes.h"
 #include "scenes/ui.h"
 
@@ -15,6 +16,7 @@ typedef enum { OPT_MUSIC, OPT_SFX, OPT_LEFTY, OPT_ERASE, OPT_COUNT } OptionRow;
 static int g_confirm_erase;
 static bool g_erased;
 static Watch w_opts;
+static uint32_t g_frame;
 
 static int row_y(int r) { return 30 + r * 30; }
 static Rect minus_rect(int r) { return rect_make(124, row_y(r), 28, 24); }
@@ -35,6 +37,7 @@ static void draw_volume(Surface *s, int r, const char *label, int value)
 static void draw_options(Surface *s)
 {
     const Progress *p = progress();
+    decor_polka(s, COL_CREAM, COL_CREAM_DARK, g_frame);
     draw_rect(s, 0, 0, SCREEN_W, 20, COL_LAVENDER);
     text_draw_aligned(s, 0, 5, SCREEN_W, "Options", COL_INK, ALIGN_CENTER);
     draw_volume(s, OPT_MUSIC, "Musique", p->music_volume);
@@ -88,6 +91,9 @@ static void options_update(void)
 {
     const Input *in = input_get();
     Progress *p = progress();
+    g_frame++;
+    if ((g_frame & 3) == 0)
+        screen_dirty_all(SCREEN_BOTTOM);
     if (g_confirm_erase)
         g_confirm_erase--;
     if (scene_transitioning())

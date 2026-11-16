@@ -37,8 +37,16 @@ static int next_char(const char **p)
     return '?';
 }
 
+static int g_reveal = -1;
+
+void text_set_reveal(int n) { g_reveal = n; }
+
 static void draw_glyph(Surface *s, int x, int y, int code, uint16_t color, int scale)
 {
+    if (g_reveal == 0)
+        return;
+    if (g_reveal > 0 && code != ' ')
+        g_reveal--;
     if (code < 0x20 || code > 0xFF)
         code = '?';
     const uint8_t *g = FONT_DATA + (code - 0x20) * FONT_H;

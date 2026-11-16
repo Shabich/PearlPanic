@@ -5,8 +5,12 @@ Les PNG sont la source de vérité : un artiste peut les remplacer à la main,
 puis `make assets` (tools/png2c.py) les convertit en C.
 Transparence : canal alpha (pixel alpha < 128 = transparent).
 """
+import sys
 from pathlib import Path
 from PIL import Image, ImageDraw
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from art import backgrounds, customers, equipment  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 GFX = ROOT / "gfx"
@@ -16,108 +20,6 @@ WHITE = (255, 255, 255, 255)
 BLUSH = (255, 140, 160, 255)
 SWEAT = (140, 200, 255, 255)
 ANGRY = (230, 60, 70, 255)
-
-# (nom, couleur du corps, couleur des détails, style d'oreilles)
-CUSTOMERS = [
-    ("lapin",      (255, 190, 205), (225, 130, 155), "bunny"),
-    ("chat",       (205, 190, 245), (150, 130, 210), "cat"),
-    ("ours",       (230, 195, 160), (180, 135, 100), "bear"),
-    ("grenouille", (170, 225, 170), (100, 170, 110), "frog"),
-    ("poussin",    (255, 230, 130), (235, 170, 60),  "chick"),
-    ("panda",      (250, 250, 250), (70, 60, 70),    "panda"),
-]
-MOODS = ["content", "neutre", "inquiet", "furieux"]
-
-
-def rgba(c):
-    return c if len(c) == 4 else (*c, 255)
-
-
-def customer(body, detail, style, mood):
-    W, H = 40, 48
-    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    body, detail = rgba(body), rgba(detail)
-    if mood == 3:  # furieux : teinte rouge
-        body = (min(255, int(body[0] * 0.85 + 40)), int(body[1] * 0.85), int(body[2] * 0.85), 255)
-
-    # Oreilles / accessoires derrière la tête
-    if style == "bunny":
-        d.ellipse((9, 0, 16, 20), fill=body, outline=detail)
-        d.ellipse((24, 0, 31, 20), fill=body, outline=detail)
-        d.ellipse((11, 4, 14, 16), fill=BLUSH)
-        d.ellipse((26, 4, 29, 16), fill=BLUSH)
-    elif style == "cat":
-        d.polygon([(5, 18), (9, 4), (17, 13)], fill=body, outline=detail)
-        d.polygon([(35, 18), (31, 4), (23, 13)], fill=body, outline=detail)
-    elif style in ("bear", "panda"):
-        ear = detail if style == "panda" else body
-        d.ellipse((4, 9, 15, 20), fill=ear, outline=detail)
-        d.ellipse((25, 9, 36, 20), fill=ear, outline=detail)
-    elif style == "frog":
-        d.ellipse((6, 6, 18, 18), fill=body, outline=detail)
-        d.ellipse((22, 6, 34, 18), fill=body, outline=detail)
-    elif style == "chick":
-        d.line((20, 6, 20, 13), fill=detail, width=2)
-        d.line((17, 8, 20, 13), fill=detail)
-
-    # Corps (tête-blob)
-    d.ellipse((3, 12, 36, 47), fill=body, outline=detail)
-
-    # Yeux
-    ey = 26 if style != "frog" else 12
-    exs = (13, 26)
-    if style == "panda":
-        for ex in exs:
-            d.ellipse((ex - 4, ey - 3, ex + 4, ey + 4), fill=detail)
-    if style == "frog":
-        for ex in (12, 28):
-            d.ellipse((ex - 3, ey - 3, ex + 3, ey + 3), fill=WHITE)
-        exs = (12, 28)
-    eye_col = WHITE if style == "panda" else INK
-    for ex in exs:
-        if mood == 0:      # yeux fermés heureux ^^
-            d.line((ex - 2, ey + 1, ex, ey - 1), fill=eye_col)
-            d.line((ex, ey - 1, ex + 2, ey + 1), fill=eye_col)
-        elif mood == 3:    # sourcils froncés
-            d.rectangle((ex - 1, ey, ex, ey + 2), fill=eye_col)
-            if ex < 20:
-                d.line((ex - 3, ey - 4, ex + 2, ey - 2), fill=INK)
-            else:
-                d.line((ex - 2, ey - 2, ex + 3, ey - 4), fill=INK)
-        else:
-            d.rectangle((ex - 1, ey - 1, ex, ey + 2), fill=eye_col)
-
-    # Joues
-    cy = 33
-    d.ellipse((6, cy - 1, 11, cy + 2), fill=BLUSH)
-    d.ellipse((28, cy - 1, 33, cy + 2), fill=BLUSH)
-
-    # Bouche / bec
-    my = 35
-    if style == "chick":
-        d.polygon([(17, my - 3), (23, my - 3), (20, my + 1)], fill=detail)
-    elif mood == 0:
-        d.arc((16, my - 4, 23, my + 2), 20, 160, fill=INK)
-    elif mood == 1:
-        d.line((18, my, 21, my), fill=INK)
-    elif mood == 2:
-        d.line((17, my + 1, 19, my), fill=INK)
-        d.line((19, my, 22, my + 1), fill=INK)
-    else:
-        d.arc((16, my, 23, my + 6), 200, 340, fill=INK)
-
-    # Effets d'humeur
-    if mood == 2:  # goutte de sueur
-        d.polygon([(33, 14), (31, 19), (35, 19)], fill=SWEAT)
-        d.ellipse((31, 17, 35, 21), fill=SWEAT)
-    if mood == 3:  # veine de colère
-        d.line((30, 12, 34, 12), fill=ANGRY, width=2)
-        d.line((34, 16, 38, 16), fill=ANGRY, width=2)
-        d.line((32, 10, 32, 14), fill=ANGRY, width=2)
-        d.line((36, 14, 36, 18), fill=ANGRY, width=2)
-    return img
-
 
 def new16():
     img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
@@ -207,9 +109,9 @@ def save(img, rel):
 
 
 if __name__ == "__main__":
-    for name, body, detail, style in CUSTOMERS:
-        for m, mood in enumerate(MOODS):
-            save(customer(body, detail, style, m), f"customers/{name}_{m}.png")
+    customers.generate(save)
+    backgrounds.generate(save)
+    equipment.generate(save)
     for name, fn in (("pearl", icon_pearl), ("popping", icon_popping), ("jelly", icon_jelly),
                      ("cream", icon_cream), ("ice", icon_ice), ("lock", icon_lock),
                      ("heart", icon_heart), ("coin", icon_coin)):

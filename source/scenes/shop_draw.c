@@ -12,11 +12,14 @@
 #include "gfx/font.h"
 #include "gfx/palette.h"
 #include "core/tween.h"
+#include "scenes/cup_anim.h"
+#include "scenes/decor.h"
 #include "scenes/fx.h"
 #include "scenes/shop_layout.h"
 #include "scenes/ui.h"
 
 static const ShopView *V;
+#define BUBBLE_POP 10
 bool g_layout_lefty;
 
 static bool visible(const Surface *s, Rect r)
@@ -26,15 +29,46 @@ static bool visible(const Surface *s, Rect r)
 
 // ============================================================ Données d'aide
 
-const Image *customer_image(int type, int mood)
+const Image *customer_image_ex(int type, int mood, int pose)
 {
-    static const Image *const IMGS[CT_COUNT][STRESS_LEVELS] = {
-        [CT_LAPIN]      = { &IMG_customers_lapin_0, &IMG_customers_lapin_1, &IMG_customers_lapin_2, &IMG_customers_lapin_3 },
-        [CT_CHAT]       = { &IMG_customers_chat_0, &IMG_customers_chat_1, &IMG_customers_chat_2, &IMG_customers_chat_3 },
-        [CT_OURS]       = { &IMG_customers_ours_0, &IMG_customers_ours_1, &IMG_customers_ours_2, &IMG_customers_ours_3 },
-        [CT_GRENOUILLE] = { &IMG_customers_grenouille_0, &IMG_customers_grenouille_1, &IMG_customers_grenouille_2, &IMG_customers_grenouille_3 },
-        [CT_POUSSIN]    = { &IMG_customers_poussin_0, &IMG_customers_poussin_1, &IMG_customers_poussin_2, &IMG_customers_poussin_3 },
-        [CT_PANDA]      = { &IMG_customers_panda_0, &IMG_customers_panda_1, &IMG_customers_panda_2, &IMG_customers_panda_3 },
+    // [espèce][humeur][pose] : pose 0 = normal, 1 = yeux fermés, 2 = parle
+    static const Image *const IMGS[CT_COUNT][STRESS_LEVELS][CUSTOMER_POSES] = {
+        [CT_LAPIN] = {
+            { &IMG_customers_lapin_0, &IMG_customers_lapin_0b, &IMG_customers_lapin_0t },
+            { &IMG_customers_lapin_1, &IMG_customers_lapin_1b, &IMG_customers_lapin_1t },
+            { &IMG_customers_lapin_2, &IMG_customers_lapin_2b, &IMG_customers_lapin_2t },
+            { &IMG_customers_lapin_3, &IMG_customers_lapin_3b, &IMG_customers_lapin_3t },
+        },
+        [CT_CHAT] = {
+            { &IMG_customers_chat_0, &IMG_customers_chat_0b, &IMG_customers_chat_0t },
+            { &IMG_customers_chat_1, &IMG_customers_chat_1b, &IMG_customers_chat_1t },
+            { &IMG_customers_chat_2, &IMG_customers_chat_2b, &IMG_customers_chat_2t },
+            { &IMG_customers_chat_3, &IMG_customers_chat_3b, &IMG_customers_chat_3t },
+        },
+        [CT_OURS] = {
+            { &IMG_customers_ours_0, &IMG_customers_ours_0b, &IMG_customers_ours_0t },
+            { &IMG_customers_ours_1, &IMG_customers_ours_1b, &IMG_customers_ours_1t },
+            { &IMG_customers_ours_2, &IMG_customers_ours_2b, &IMG_customers_ours_2t },
+            { &IMG_customers_ours_3, &IMG_customers_ours_3b, &IMG_customers_ours_3t },
+        },
+        [CT_GRENOUILLE] = {
+            { &IMG_customers_grenouille_0, &IMG_customers_grenouille_0b, &IMG_customers_grenouille_0t },
+            { &IMG_customers_grenouille_1, &IMG_customers_grenouille_1b, &IMG_customers_grenouille_1t },
+            { &IMG_customers_grenouille_2, &IMG_customers_grenouille_2b, &IMG_customers_grenouille_2t },
+            { &IMG_customers_grenouille_3, &IMG_customers_grenouille_3b, &IMG_customers_grenouille_3t },
+        },
+        [CT_POUSSIN] = {
+            { &IMG_customers_poussin_0, &IMG_customers_poussin_0b, &IMG_customers_poussin_0t },
+            { &IMG_customers_poussin_1, &IMG_customers_poussin_1b, &IMG_customers_poussin_1t },
+            { &IMG_customers_poussin_2, &IMG_customers_poussin_2b, &IMG_customers_poussin_2t },
+            { &IMG_customers_poussin_3, &IMG_customers_poussin_3b, &IMG_customers_poussin_3t },
+        },
+        [CT_PANDA] = {
+            { &IMG_customers_panda_0, &IMG_customers_panda_0b, &IMG_customers_panda_0t },
+            { &IMG_customers_panda_1, &IMG_customers_panda_1b, &IMG_customers_panda_1t },
+            { &IMG_customers_panda_2, &IMG_customers_panda_2b, &IMG_customers_panda_2t },
+            { &IMG_customers_panda_3, &IMG_customers_panda_3b, &IMG_customers_panda_3t },
+        },
     };
     if (type < 0 || type >= CT_COUNT)
         type = 0;
@@ -42,7 +76,14 @@ const Image *customer_image(int type, int mood)
         mood = 0;
     if (mood >= STRESS_LEVELS)
         mood = STRESS_LEVELS - 1;
-    return IMGS[type][mood];
+    if (pose < 0 || pose >= CUSTOMER_POSES)
+        pose = 0;
+    return IMGS[type][mood][pose];
+}
+
+const Image *customer_image(int type, int mood)
+{
+    return customer_image_ex(type, mood, POSE_NORMAL);
 }
 
 static const Image *topping_icon(int ing)
@@ -140,146 +181,6 @@ uint32_t shop_tutorial_hash(const ShopView *v)
     return (uint32_t)id;
 }
 
-// ================================================================ Gobelet
-
-static int cup_halfwidth(int y, int rim, int bottom)
-{
-    return CUP_TOP_HW + (CUP_BOT_HW - CUP_TOP_HW) * (y - rim) / (bottom - rim);
-}
-
-#define LIQUID_PX (CUP_BOT_Y - CUP_TOP_Y)
-
-void draw_cup(Surface *s, int cx, int dy, const Drink *d, int wobble, int pouring_ing)
-{
-    cx += wobble;
-    int rim = CUP_TOP_Y - 6 + dy, bottom = CUP_BOT_Y + 2 + dy, inner_bot = CUP_BOT_Y + dy;
-    int level = d->liquid_total * LIQUID_PX / CUP_CAPACITY;
-    int surface_y = inner_bot - level;
-    uint16_t mixed = drink_mixed_color(d);
-
-    // Flaque si ça a débordé
-    if (d->overflowed) {
-        uint16_t c = d->layer_count ? ing_info(d->layers[d->layer_count - 1].ing)->color : mixed;
-        draw_rect(s, cx - CUP_BOT_HW - 8, bottom + 1, 2 * CUP_BOT_HW + 17, 3, c);
-        draw_rect(s, cx - CUP_BOT_HW - 4, bottom + 4, 2 * CUP_BOT_HW + 9, 2, c);
-    }
-
-    // Paille (derrière le couvercle)
-    if (d->sealed) {
-        draw_rect(s, cx + 6, rim - 22, 5, 30, COL_PINK_DARK);
-        for (int y = rim - 20; y < rim + 6; y += 6)
-            draw_rect(s, cx + 6, y, 5, 2, COL_WHITE);
-    }
-
-    // Verre
-    for (int y = rim; y <= bottom; y++) {
-        int hw = cup_halfwidth(y, rim, bottom);
-        draw_hline(s, cx - hw, y, 2 * hw + 1, COL_GLASS);
-        draw_pixel(s, cx - hw, y, COL_GLASS_EDGE);
-        draw_pixel(s, cx + hw, y, COL_GLASS_EDGE);
-    }
-    draw_hline(s, cx - CUP_BOT_HW, bottom, 2 * CUP_BOT_HW + 1, COL_GLASS_EDGE);
-
-    // Liquide, couche par couche depuis le fond
-    int layer = 0, acc = d->layer_count ? d->layers[0].amount : 0;
-    for (int y = inner_bot; y > surface_y; y--) {
-        int units = (inner_bot - y) * CUP_CAPACITY / LIQUID_PX;
-        while (layer + 1 < d->layer_count && units >= acc)
-            acc += d->layers[++layer].amount;
-        uint16_t c = d->shaken ? mixed : ing_info(d->layers[layer].ing)->color;
-        int hw = cup_halfwidth(y, rim, bottom) - 1;
-        draw_hline(s, cx - hw, y, 2 * hw + 1, c);
-        draw_hline(s, cx - hw + 1, y, 2, color_mix(c, COL_WHITE, 120));
-    }
-
-    // Sirops : bande colorée au fond (avant mélange)
-    int pumps = 0, sr = 0, sg = 0, sb = 0;
-    for (int i = SYRUP_FIRST; i <= SYRUP_LAST; i++) {
-        uint16_t c = ing_info(i)->color;
-        pumps += d->qty[i];
-        sr += (c & 31) * d->qty[i];
-        sg += ((c >> 5) & 31) * d->qty[i];
-        sb += ((c >> 10) & 31) * d->qty[i];
-    }
-    if (pumps && !d->shaken) {
-        uint16_t syrup = RGB(sr / pumps, sg / pumps, sb / pumps);
-        int band = pumps * 3 > 18 ? 18 : pumps * 3;
-        for (int y = inner_bot; y > inner_bot - band; y--) {
-            int hw = cup_halfwidth(y, rim, bottom) - 1;
-            uint16_t c = syrup;
-            // vagues de sirop sur les parois
-            int wave = ((y * 5) & 7) < 3 ? 2 : 0;
-            draw_hline(s, cx - hw, y, 3 + wave, c);
-            draw_hline(s, cx + hw - 2 - wave, y, 3 + wave, c);
-            if (y > inner_bot - band / 2 || y <= surface_y)
-                draw_hline(s, cx - hw, y, 2 * hw + 1, c);
-        }
-    }
-
-    // Garnitures
-    int span = 2 * CUP_BOT_HW - 8;
-    int pearls = d->qty[ING_PEARLS] * 6;
-    for (int k = 0; k < pearls; k++) {
-        int x = cx - CUP_BOT_HW + 5 + (k * 7) % span;
-        int y = inner_bot - 3 - ((k * 7) / span) * 4 - (k & 1);
-        draw_disc(s, x, y, 2, RGB888(74, 44, 42));
-        draw_pixel(s, x - 1, y - 1, RGB888(160, 120, 110));
-    }
-    int base = inner_bot - 4 - (pearls * 7 / span + 1) * 4;
-    int pops = d->qty[ING_POPPING] * 4;
-    for (int k = 0; k < pops; k++) {
-        int x = cx - CUP_BOT_HW + 7 + (k * 11) % (span - 2);
-        int y = base - ((k * 11) / (span - 2)) * 5 - (k % 3);
-        draw_disc(s, x, y, 2, RGB888(255, 160, 70));
-        draw_pixel(s, x - 1, y - 1, COL_WHITE);
-    }
-    int jelly = d->qty[ING_JELLY] * 4;
-    for (int k = 0; k < jelly; k++) {
-        int x = cx - CUP_BOT_HW + 6 + (k * 13) % (span - 4);
-        int y = base - 8 - ((k * 13) / (span - 4)) * 6 - (k & 1) * 2;
-        draw_rect(s, x, y, 4, 4, RGB888(150, 220, 120));
-        draw_pixel(s, x, y, COL_WHITE);
-    }
-    int ice = d->qty[ING_ICE] * 2;
-    int ice_y = d->liquid_total ? surface_y + 2 : inner_bot - 8;
-    for (int k = 0; k < ice; k++) {
-        int x = cx - 18 + (k * 9) % 32;
-        int y = ice_y + ((k * 9) / 32) * 7;
-        draw_rect(s, x, y, 7, 6, RGB888(215, 240, 255));
-        draw_rect_outline(s, x, y, 7, 6, RGB888(150, 195, 230));
-        draw_hline(s, x + 1, y + 1, 2, COL_WHITE);
-    }
-    if (d->qty[ING_CREAM]) {
-        int cy = (d->liquid_total ? surface_y : inner_bot) - 1;
-        int hw = cup_halfwidth(cy, rim, bottom) - 3;
-        int thick = 2 + d->qty[ING_CREAM] * 2;
-        for (int k = -hw; k <= hw; k += 5)
-            draw_disc(s, cx + k, cy - thick / 2, thick / 2 + 1, RGB888(255, 252, 240));
-    }
-
-    // Graduations (tous les 10 %)
-    for (int u = 10; u <= 100; u += 10) {
-        int y = inner_bot - u * LIQUID_PX / CUP_CAPACITY;
-        int hw = cup_halfwidth(y, rim, bottom);
-        int len = (u % 50) ? 3 : 6;
-        draw_hline(s, cx + hw - len, y, len, COL_GLASS_EDGE);
-    }
-
-    // Couvercle scellé
-    if (d->sealed) {
-        draw_hline(s, cx - CUP_TOP_HW - 1, rim - 1, 2 * CUP_TOP_HW + 3, COL_PINK_DARK);
-        draw_hline(s, cx - CUP_TOP_HW, rim, 2 * CUP_TOP_HW + 1, COL_PINK);
-        draw_hline(s, cx - CUP_TOP_HW, rim + 1, 2 * CUP_TOP_HW + 1, COL_PINK_PALE);
-    }
-
-    // Filet de liquide en cours de versement
-    if (pouring_ing > 0) {
-        uint16_t c = ing_info(pouring_ing)->color;
-        draw_rect(s, cx - 2, CUP_AREA_Y + dy, 4, surface_y - CUP_AREA_Y - dy, c);
-        draw_vline(s, cx - 1, CUP_AREA_Y + dy, surface_y - CUP_AREA_Y - dy, color_mix(c, COL_WHITE, 100));
-    }
-}
-
 uint32_t shop_cup_hash(const ShopView *v)
 {
     uint32_t h = hash_begin();
@@ -290,6 +191,8 @@ uint32_t shop_cup_hash(const ShopView *v)
         h = hash_add(h, d->sealed | (d->shaken << 1) | (d->overflowed << 2));
     }
     h = hash_add(h, v->session->active_cup);
+    // Les vagues bougent en permanence : on redessine toutes les 2 frames
+    h = hash_add(h, (int32_t)(v->frame / 2));
     h = hash_add(h, v->wobble);
     h = hash_add(h, v->pouring);
     h = hash_add(h, v->paused);
@@ -298,26 +201,36 @@ uint32_t shop_cup_hash(const ShopView *v)
 
 // ================================================================ Écran bas
 
+// Texte lisible sur une couleur donnée
+static uint16_t ink_on(uint16_t bg)
+{
+    int lum = (bg & 31) * 3 + ((bg >> 5) & 31) * 6 + ((bg >> 10) & 31);
+    return lum < 160 ? COL_WHITE : COL_INK;
+}
+
 static void draw_tap(Surface *s, int i, bool pressed)
 {
     Rect r = tap_rect(i);
     if (!visible(s, r))
         return;
-    Ingredient ing = TAP_INGS[i];
-    const IngredientInfo *info = ing_info(ing);
+    const IngredientInfo *info = ing_info(TAP_INGS[i]);
     bool locked = info->unlock_day > V->session->day.number;
-
-    uint16_t frame = locked ? COL_GREY_DARK : pressed ? COL_INK : COL_WOOD_DARK;
-    draw_round_rect(s, r.x, r.y, r.w, r.h, locked ? COL_GREY : COL_CREAM, frame);
-    // Réservoir
-    uint16_t tank = locked ? COL_GREY : info->color;
-    draw_round_rect(s, r.x + 4, r.y + 3, r.w - 8, 16, tank, color_darken(tank, 6));
-    draw_rect(s, r.x + 6, r.y + 5, 2, 10, color_mix(tank, COL_WHITE, 140));
-    // Bec
-    draw_rect(s, r.x + r.w / 2 - 2, r.y + 19, 4, 3, COL_GREY_DARK);
+    draw_mask(s, &IMG_station_tap_mask, r.x, r.y, locked ? COL_GREY : info->color);
+    if (pressed) {
+        // Glouglou : des bulles remontent dans le réservoir pendant le versement
+        uint16_t b = color_mix(info->color, COL_WHITE, 170);
+        for (int k = 0; k < 4; k++) {
+            int by = r.y + 15 - (int)((V->frame / 2 + k * 4) % 12);
+            int bx = r.x + 9 + (k * 5) % 14 + (((V->frame / 4) + k) & 1);
+            draw_pixel(s, bx, by, b);
+            if (k & 1)
+                draw_pixel(s, bx + 1, by, b);
+        }
+    }
+    draw_image(s, pressed ? &IMG_station_tap_on : &IMG_station_tap, r.x, r.y);
     if (locked)
-        draw_image(s, &IMG_icons_lock, r.x + r.w / 2 - 8, r.y + 3);
-    text_draw_aligned(s, r.x, r.y + 22, r.w, info->short_name,
+        draw_image(s, &IMG_icons_lock, r.x + 8, r.y + 3);
+    text_draw_aligned(s, r.x, r.y + 23, r.w, info->short_name,
                       locked ? COL_GREY_DARK : pressed ? COL_PINK_DARK : COL_INK, ALIGN_CENTER);
 }
 
@@ -328,17 +241,20 @@ static void draw_pump(Surface *s, int i, bool flash)
         return;
     const IngredientInfo *info = ing_info(PUMP_INGS[i]);
     bool locked = info->unlock_day > V->session->day.number;
-    uint16_t body = locked ? COL_GREY : flash ? color_mix(info->color, COL_WHITE, 120) : info->color;
-    // Tête de pompe
-    draw_rect(s, r.x + r.w / 2 - 6, r.y + (flash ? 2 : 0), 12, 3, COL_GREY_DARK);
-    draw_rect(s, r.x + r.w / 2 - 1, r.y + 3, 2, 3, COL_GREY_DARK);
-    draw_round_rect(s, r.x + 2, r.y + 6, r.w - 4, r.h - 6, body, color_darken(body, 8));
+    uint16_t body = locked ? COL_GREY : flash ? color_mix(info->color, COL_WHITE, 110) : info->color;
+    draw_mask(s, &IMG_station_pump_mask, r.x, r.y, body);
+    draw_image(s, flash ? &IMG_station_pump_on : &IMG_station_pump, r.x, r.y);
+    // Une goutte de sirop tombe du bec après une pression
+    int t = V->pump_flash[i];
+    if (t > 0 && !locked) {
+        int gy = r.y + 4 + (8 - t);
+        draw_rect(s, r.x + 27, gy, 2, 2, info->color);
+        draw_pixel(s, r.x + 27, gy, color_mix(info->color, COL_WHITE, 140));
+    }
     if (locked)
-        draw_image(s, &IMG_icons_lock, r.x + r.w / 2 - 8, r.y + 7);
+        draw_image(s, &IMG_icons_lock, r.x + 11, r.y + 7);
     else
-        text_draw_aligned(s, r.x + 2, r.y + 10, r.w - 4, info->short_name,
-                          info->color == ing_info(ING_SYRUP_BROWN)->color ? COL_WHITE : COL_INK,
-                          ALIGN_CENTER);
+        text_draw_aligned(s, r.x + 2, r.y + 10, r.w - 4, info->short_name, ink_on(body), ALIGN_CENTER);
 }
 
 static void draw_selector(Surface *s)
@@ -348,8 +264,12 @@ static void draw_selector(Surface *s)
         return;
     const Day *d = &V->session->day;
     draw_round_rect(s, r.x, r.y, r.w, r.h, COL_LAVENDER, COL_LAV_DARK);
-    text_draw(s, r.x + 3, r.y + 7, "<", COL_INK, 1);
-    text_draw(s, r.x + r.w - 9, r.y + 7, ">", COL_INK, 1);
+    int waiting = 0;
+    for (int k = 0; k < DAY_SLOTS; k++)
+        waiting += d->slots[k].state == CS_WAITING;
+    int nudge = waiting > 1 && ((V->frame / 15) & 1) ? 1 : 0;
+    text_draw(s, r.x + 3 - nudge, r.y + 7, "<", COL_INK, 1);
+    text_draw(s, r.x + r.w - 9 + nudge, r.y + 7, ">", COL_INK, 1);
     const char *name = d->active >= 0 ? customer_type(d->slots[d->active].type)->name : "-";
     text_draw_aligned(s, r.x + 10, r.y + 2, r.w - 20, "Pour :", COL_INK_SOFT, ALIGN_CENTER);
     text_draw_aligned(s, r.x + 10, r.y + 12, r.w - 20, name, COL_INK, ALIGN_CENTER);
@@ -364,9 +284,9 @@ static void draw_bin(Surface *s, int i)
     const IngredientInfo *info = ing_info(ing);
     bool locked = info->unlock_day > V->session->day.number;
     bool holding = V->held == (int)ing;
-    draw_round_rect(s, r.x, r.y, r.w, r.h, locked ? COL_GREY : holding ? COL_PEACH : COL_WOOD_LIGHT,
-                    locked ? COL_GREY_DARK : COL_WOOD_DARK);
-    draw_image(s, locked ? &IMG_icons_lock : topping_icon(ing), r.x + (r.w - 16) / 2, r.y + 1);
+    draw_image(s, holding ? &IMG_station_bin_on : &IMG_station_bin, r.x, r.y);
+    int jiggle = holding ? (((V->frame / 4) & 1) ? -1 : 1) : 0;
+    draw_image(s, locked ? &IMG_icons_lock : topping_icon(ing), r.x + (r.w - 16) / 2 + jiggle, r.y + 1);
     text_draw_aligned(s, r.x, r.y + 16, r.w, info->short_name, locked ? COL_GREY_DARK : COL_INK,
                       ALIGN_CENTER);
 }
@@ -377,6 +297,7 @@ uint32_t shop_actions_hash(const ShopView *v)
     uint32_t h = hash_add(hash_begin(), drink_is_empty(d));
     h = hash_add(h, d->sealed);
     h = hash_add(h, v->session->day.active >= 0);
+    h = hash_add(h, d->sealed && v->session->day.active >= 0 ? (int)(v->frame / 12) & 1 : 0);
     return h;
 }
 
@@ -389,7 +310,13 @@ static void draw_actions(Surface *s)
               empty || d->sealed ? BTN_STYLE_DISABLED : BTN_STYLE_NORMAL);
     ui_button(s, action_rect(ACT_TRASH), "Jeter", empty ? BTN_STYLE_DISABLED : BTN_STYLE_NORMAL);
     bool can_serve = !empty && V->session->day.active >= 0;
-    ui_button(s, action_rect(ACT_SERVE), "Servir", can_serve ? BTN_STYLE_PRIMARY : BTN_STYLE_DISABLED);
+    Rect sr = action_rect(ACT_SERVE);
+    // Boisson fermée et client qui attend : le bouton « Servir » pulse
+    bool ready = can_serve && d->sealed;
+    if (ready && ((V->frame / 12) & 1))
+        sr.y -= 1;
+    ui_button(s, sr, "Servir", can_serve ? (ready && ((V->frame / 12) & 1) ? BTN_STYLE_PRESSED : BTN_STYLE_PRIMARY)
+                                         : BTN_STYLE_DISABLED);
 }
 
 Rect pause_button_rect(int i)
@@ -436,7 +363,8 @@ void shop_draw_bottom(Surface *s)
             uint16_t coaster = ss->cup_count == 2 && active ? COL_PINK_DARK : COL_MINT_DARK;
             draw_rect(s, cx - 31, CUP_BOT_Y + 3, 63, 6, coaster);
             draw_rect(s, cx - 27, CUP_BOT_Y + 9, 55, 2, color_darken(coaster, 4));
-            draw_cup(s, cx, 0, &ss->cups[i], active ? V->wobble : 0, active ? pour : 0);
+            draw_cup(s, cx, 0, &ss->cups[i], &V->cup_anim[i], V->frame, active ? V->wobble : 0,
+                     active ? pour : 0);
         }
     }
 
@@ -491,39 +419,80 @@ static int mood_of(const Customer *c)
     return day_stress_level(c);
 }
 
-// Décalage vertical / horizontal de l'animation du client
+// Petits sauts : |sin| sur `hops` sauts pendant la progression t (0..256)
+static int hop(int t256, int hops, int height)
+{
+    static const uint8_t ARC[16] = { 0, 3, 6, 8, 10, 11, 12, 12, 12, 11, 10, 8, 6, 3, 0, 0 };
+    int phase = (t256 * hops * 16 / 256) & 15;
+    return -ARC[phase] * height / 12;
+}
+
+// Les clients des deux premières places entrent par la gauche, la 3e par la droite
+static int entry_side(int slot) { return slot == DAY_SLOTS - 1 ? 1 : -1; }
+
+// Décalage de l'animation du client (arrivée, attente, départ)
 static void customer_offset(const ShopView *v, int slot, int *dx, int *dy)
 {
     const Customer *c = &v->session->day.slots[slot];
+    int side = entry_side(slot);
+    int far = side < 0 ? -(slot_cx(slot) + 24) : SCREEN_W - slot_cx(slot) + 24;
     *dx = 0;
     *dy = 0;
     switch (c->state) {
-    case CS_ARRIVING:
-        // Surgit de derrière le comptoir avec un petit dépassement (tâche 1.9)
-        *dy = tw_lerp(48, 0, ease_out_back(tw_progress(c->anim, ARRIVE_FRAMES)));
+    case CS_ARRIVING: {
+        // Arrive en sautillant depuis le bord (tâche 1.9)
+        int t = tw_progress(c->anim, ARRIVE_FRAMES);
+        *dx = tw_lerp(far, 0, ease_out_quad(t));
+        *dy = hop(t, 4, 5);
         break;
+    }
     case CS_WAITING: {
         int level = day_stress_level(c);
-        int period = level >= 3 ? 4 : level == 2 ? 10 : 24;
+        // Respiration lente, qui s'accélère avec le stress
+        int period = level >= 3 ? 4 : level == 2 ? 12 : 30;
         *dy = ((v->frame / period + slot) & 1) ? -1 : 0;
         if (level >= 3)
             *dx = ((v->frame / 3) & 1) ? 1 : -1;
+        // Petit sursaut quand le stress monte d'un cran
+        if (v->jolt[slot])
+            *dy -= v->jolt[slot] > 4 ? 3 : 1;
+        // Rebond de joie à l'arrivée au comptoir
+        if (c->anim < 10)
+            *dy -= (10 - c->anim) / 3;
         break;
     }
     case CS_LEAVING:
         if (c->anim < 16) {
+            // Réaction sur place : saut de joie ou trépignement
             int t = c->anim < 8 ? c->anim : 16 - c->anim;
             if (c->happy)
-                *dy = -t / 2;
+                *dy = -t;
             else
                 *dx = (c->anim & 2) ? 2 : -2;
         } else {
-            *dy = tw_lerp(0, 52, ease_in_quad(tw_progress(c->anim - 16, LEAVE_FRAMES - 16)));
+            // Repart en marchant vers la sortie (côté opposé si content)
+            int t = tw_progress(c->anim - 16, LEAVE_FRAMES - 16);
+            int out = c->happy ? -far : far;
+            *dx = tw_lerp(0, out, ease_in_quad(t));
+            *dy = c->happy ? hop(t, 3, 6) : hop(t, 5, 1);
         }
         break;
     default:
         break;
     }
+}
+
+// Pose du client : clignement régulier, bouche qui bouge quand il parle
+static int customer_pose(const ShopView *v, int slot)
+{
+    const Customer *c = &v->session->day.slots[slot];
+    bool talking = (c->state == CS_WAITING && c->anim < 45) ||
+                   (c->state == CS_LEAVING && c->anim < 28 && c->says);
+    if (talking)
+        return ((v->frame / 6) & 1) ? POSE_TALK : POSE_NORMAL;
+    if (((v->frame + c->seq * 53 + slot * 29) % 160) < 6)
+        return POSE_BLINK;
+    return POSE_NORMAL;
 }
 
 uint32_t shop_slot_hash(const ShopView *v, int slot)
@@ -538,18 +507,21 @@ uint32_t shop_slot_hash(const ShopView *v, int slot)
     h = hash_add(h, c->seq);
     h = hash_add(h, mood_of(c));
     h = hash_add(h, dx * 100 + dy);
+    h = hash_add(h, customer_pose(v, slot));
     h = hash_add(h, d->active == slot);
     h = hash_add(h, c->state == CS_WAITING ? 40 * c->patience / (c->patience_max ? c->patience_max : 1) : -1);
-    h = hash_add(h, c->state == CS_ARRIVING ? c->anim > ARRIVE_FRAMES / 2 : 0);
+    h = hash_add(h, c->state == CS_WAITING && c->anim < BUBBLE_POP ? c->anim : -1);
+    if (c->state == CS_WAITING) {
+        int ratio = 256 * c->patience / (c->patience_max ? c->patience_max : 1);
+        h = hash_add(h, ratio < 64 ? (int)(v->frame / 8) & 1 : 2);
+        h = hash_add(h, d->active == slot ? (int)(v->frame / 24) & 1 : 0);
+    }
     h = hash_add(h, v->coin_popup_slot == slot && v->coin_popup_timer > 0 ? v->coin_popup_timer / 3 : -1);
     return h;
 }
 
 static void draw_slot(Surface *s, int i)
 {
-    Rect area = slot_rect(i);
-    if (!visible(s, area))
-        return;
     const Day *d = &V->session->day;
     const Customer *c = &d->slots[i];
     if (c->state == CS_EMPTY)
@@ -559,18 +531,34 @@ static void draw_slot(Surface *s, int i)
     customer_offset(V, i, &dx, &dy);
 
     // Client, caché sous le comptoir
-    Rect saved = s->clip;
-    s->clip = rect_intersect(s->clip, rect_make(0, HUD_H, SCREEN_W, COUNTER_Y - HUD_H));
-    draw_image(s, customer_image(c->type, mood_of(c)), cx - 20 + dx, CUSTOMER_Y + dy);
-    if (c->special >= 0)
-        draw_accessory(s, SPECIALS[c->special].accessory, cx - 20 + dx, CUSTOMER_Y + dy);
-    s->clip = saved;
+    Rect body = rect_make(cx - 20 + dx, CUSTOMER_Y + dy - 4, 40, 52);
+    if (visible(s, body)) {
+        Rect saved = s->clip;
+        s->clip = rect_intersect(s->clip, rect_make(0, HUD_H, SCREEN_W, COUNTER_Y - HUD_H));
+        draw_image(s, customer_image_ex(c->type, mood_of(c), customer_pose(V, i)), cx - 20 + dx,
+                   CUSTOMER_Y + dy);
+        if (c->special >= 0)
+            draw_accessory(s, SPECIALS[c->special].accessory, cx - 20 + dx, CUSTOMER_Y + dy);
+        s->clip = saved;
+    }
+    if (!visible(s, slot_rect(i)))
+        return;
 
     bool active = d->active == i;
     Rect b = rect_make(cx - BUBBLE_W / 2, BUBBLE_Y, BUBBLE_W, BUBBLE_H);
 
-    if (c->state == CS_WAITING || (c->state == CS_ARRIVING && c->anim > ARRIVE_FRAMES / 2)) {
+    if (c->state == CS_WAITING && c->anim < BUBBLE_POP) {
+        // La bulle grossit avec un léger dépassement avant d'afficher la commande
+        int k = ease_out_back(tw_progress(c->anim, BUBBLE_POP));
+        int bw = BUBBLE_W * k / 256, bh = BUBBLE_H * k / 256;
+        if (bw > 8 && bh > 8)
+            ui_bubble(s, rect_make(cx - bw / 2, BUBBLE_Y + (BUBBLE_H - bh) / 2, bw, bh), COL_WHITE,
+                      c->special >= 0 ? COL_WARN : COL_INK_SOFT);
+    } else if (c->state == CS_WAITING) {
         uint16_t border = c->special >= 0 ? COL_WARN : active ? COL_PINK_DARK : COL_INK_SOFT;
+        // Bulle du client sélectionné : flotte doucement
+        if (active && ((V->frame / 24) & 1))
+            b.y -= 1;
         ui_bubble(s, b, active ? COL_PINK_PALE : COL_WHITE, border);
         if (active)
             draw_round_rect(s, b.x + 1, b.y + 1, b.w - 2, b.h - 2, COL_PINK_PALE, COL_PINK);
@@ -585,7 +573,10 @@ static void draw_slot(Surface *s, int i)
         }
         if (c->state == CS_WAITING) {
             int ratio = 256 * c->patience / (c->patience_max ? c->patience_max : 1);
-            ui_gauge(s, cx - 20, GAUGE_Y, 40, 6, c->patience, c->patience_max, ui_patience_color(ratio));
+            uint16_t col = ui_patience_color(ratio);
+            if (ratio < 64 && ((V->frame / 8) & 1))
+                col = COL_WHITE;   // clignote quand il ne reste presque plus de patience
+            ui_gauge(s, cx - 20, GAUGE_Y, 40, 6, c->patience, c->patience_max, col);
         }
     } else if (c->state == CS_LEAVING && c->says && c->anim < LEAVE_FRAMES - 4) {
         uint16_t fill = c->happy ? COL_MINT : COL_PINK_PALE;
@@ -619,17 +610,22 @@ static void draw_hud(Surface *s)
         snprintf(buf, sizeof(buf), "Jour %d", d->number);
     text_draw(s, 4, 3, buf, d->endless ? COL_BAD : COL_INK, 1);
 
-    draw_image(s, &IMG_icons_heart, 54, 0);
     int amb = 256 * d->ambiance / AMBIANCE_MAX;
+    // Le cœur bat, de plus en plus vite quand l'ambiance chute
+    int beat_period = amb < 77 ? 10 : amb < 140 ? 20 : 40;
+    int beat = ((V->frame / beat_period) & 1) ? -1 : 0;
+    draw_image(s, &IMG_icons_heart, 54, beat);
     ui_gauge(s, 72, 4, 70, 8, d->ambiance, AMBIANCE_MAX, ui_patience_color(amb));
 
     uint32_t left = d->endless ? d->frame / FPS : (day_time_left(d) + FPS - 1) / FPS;
     snprintf(buf, sizeof(buf), "%lu:%02lu", (unsigned long)(left / 60), (unsigned long)(left % 60));
-    text_draw(s, 154, 3, buf, !d->endless && left <= 15 ? COL_BAD : COL_INK, 1);
+    bool hurry = !d->endless && left <= 15;
+    text_draw(s, 154, 3 - (hurry && ((V->frame / 15) & 1)), buf, hurry ? COL_BAD : COL_INK, 1);
 
     draw_image(s, &IMG_icons_coin, 200, 0);
-    snprintf(buf, sizeof(buf), "%d", d->coins + d->tips);
-    text_draw(s, 218, 3, buf, COL_INK, 1);
+    snprintf(buf, sizeof(buf), "%d", V->coins_shown);
+    bool counting = V->coins_shown != d->coins + d->tips;
+    text_draw(s, 218, 3 - counting, buf, counting ? COL_PINK_DARK : COL_INK, 1);
 }
 
 static void draw_panel(Surface *s)
@@ -640,12 +636,14 @@ static void draw_panel(Surface *s)
     const Day *d = &V->session->day;
     draw_round_rect(s, r.x, r.y, r.w, r.h, COL_CREAM, COL_WOOD_DARK);
     int x = r.x + 4, w = r.w - 8, y = r.y + 3;
+    text_set_reveal(V->panel_reveal);
 
     if (V->toast_timer > 0) {
         text_draw_shadow(s, x + (w - text_width(V->toast1, 1)) / 2, y + 6, V->toast1,
                          V->toast_color, COL_CREAM_DARK, 1);
         if (V->toast2[0])
             text_draw_wrapped(s, x, y + 22, w, V->toast2, COL_INK, ALIGN_CENTER);
+        text_set_reveal(-1);
         return;
     }
     if (d->active < 0) {
@@ -659,6 +657,7 @@ static void draw_panel(Surface *s)
             snprintf(line2, sizeof(line2), "Objectif : %s", obj);
             text_draw_aligned(s, x, y + 30, w, line2, COL_PINK_DARK, ALIGN_CENTER);
         }
+        text_set_reveal(-1);
         return;
     }
 
@@ -678,6 +677,7 @@ static void draw_panel(Surface *s)
             recipe_describe(c->recipe, line, sizeof(line));
             text_draw_wrapped(s, x, y + FONT_LINE * (lines + 1) + 3, w, line, COL_INK_SOFT, ALIGN_LEFT);
         }
+        text_set_reveal(-1);
         return;
     }
     if (c->riddle) {
@@ -691,6 +691,7 @@ static void draw_panel(Surface *s)
         recipe_describe(c->recipe, line, sizeof(line));
         text_draw_wrapped(s, x, y + FONT_LINE + 2, w, line, COL_INK, ALIGN_LEFT);
     }
+    text_set_reveal(-1);
     int id;
     const char *tip = tutorial_step(V, &id);
     if (tip) {
@@ -701,6 +702,7 @@ static void draw_panel(Surface *s)
 
 void shop_draw_top(Surface *s)
 {
+    decor_shop_draw(s, V->frame);
     draw_hud(s);
     for (int i = 0; i < DAY_SLOTS; i++)
         draw_slot(s, i);
@@ -710,50 +712,15 @@ void shop_draw_top(Surface *s)
 
 // ================================================================ Fonds statiques
 
+// Décors dessinés dans gfx/bg/ (tools/art/backgrounds.py)
 static void draw_top_background(Surface *s)
 {
-    // Mur rayé
-    draw_fill(s, COL_WALL);
-    for (int x = 0; x < SCREEN_W; x += 16)
-        draw_rect(s, x, HUD_H, 8, COUNTER_Y - HUD_H, COL_WALL_LINE);
-    // Étagère avec bocaux
-    draw_rect(s, 8, 40, 240, 3, COL_WOOD_DARK);
-    static const uint16_t JARS[] = { COL_PINK, COL_MINT, COL_YELLOW, COL_LAVENDER, COL_PEACH };
-    for (int i = 0; i < 12; i++) {
-        int x = 14 + i * 20;
-        uint16_t c = JARS[i % 5];
-        draw_round_rect(s, x, 28, 12, 12, COL_GLASS, COL_GLASS_EDGE);
-        draw_rect(s, x + 2, 32, 8, 7, c);
-        draw_rect(s, x + 1, 26, 10, 3, COL_WOOD_DARK);
-    }
-    // Plantes
-    for (int k = 0; k < 2; k++) {
-        int x = k ? 236 : 12;
-        draw_rect(s, x - 6, 104, 13, 20, COL_PEACH);
-        draw_rect(s, x - 7, 104, 15, 3, color_darken(COL_PEACH, 4));
-        for (int l = 0; l < 5; l++)
-            draw_disc(s, x - 6 + l * 3, 96 - (l & 1) * 6, 4, COL_MINT_DARK);
-    }
-    // Guirlande
-    for (int x = 4; x < SCREEN_W; x += 12) {
-        int y = 20 + ((x / 12) & 1) * 2;
-        draw_disc(s, x, y, 2, JARS[(x / 12) % 5]);
-    }
-    // Comptoir
-    draw_rect(s, 0, COUNTER_Y, SCREEN_W, SCREEN_H - COUNTER_Y, COL_WOOD);
-    draw_rect(s, 0, COUNTER_Y, SCREEN_W, 4, COL_WOOD_LIGHT);
-    draw_hline(s, 0, COUNTER_Y + 4, SCREEN_W, COL_WOOD_DARK);
-    for (int y = COUNTER_Y + 12; y < SCREEN_H; y += 10)
-        draw_hline(s, 0, y, SCREEN_W, color_mix(COL_WOOD, COL_WOOD_DARK, 80));
+    draw_image(s, &IMG_bg_shop_top, 0, 0);
 }
 
 static void draw_bottom_background(Surface *s)
 {
-    ui_polka_background(s, COL_MINT, color_mix(COL_MINT, COL_WHITE, 120));
-    // Panneau des tireuses
-    draw_rect(s, 0, 0, SCREEN_W, PUMP_Y + PUMP_H + 3, COL_WOOD_LIGHT);
-    draw_hline(s, 0, PUMP_Y + PUMP_H + 3, SCREEN_W, COL_WOOD_DARK);
-    draw_hline(s, 0, PUMP_Y - 2, SCREEN_W, color_mix(COL_WOOD_LIGHT, COL_WOOD_DARK, 100));
+    draw_image(s, &IMG_bg_station, 0, 0);
 }
 
 void shop_draw_backgrounds(const ShopView *v)

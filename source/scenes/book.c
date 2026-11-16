@@ -10,6 +10,7 @@
 #include "gfx/screen.h"
 #include "plat/plat.h"
 #include "scenes/scenes.h"
+#include "scenes/cup_anim.h"
 #include "scenes/shop_draw.h"
 #include "scenes/ui.h"
 
@@ -18,6 +19,10 @@
 #define ROWS       10
 
 static int g_sel, g_scroll;
+static int g_page_drawn = -1;
+static uint32_t g_frame, g_page_frame;
+static CupAnim g_cup;
+static Drink g_drink;
 static Watch w_list, w_page;
 
 static Rect back_rect(void) { return rect_make(4, 166, 80, 22); }
@@ -40,8 +45,8 @@ static void make_drink(int recipe, Drink *d)
         drink_shake(d);
 }
 
-// Écran haut : la recette sélectionnée
-static void draw_page(Surface *s)
+// Écran haut : la page (fond, redessiné quand la sélection change)…
+static void draw_page_background(Surface *s)
 {
     const Recipe *r = &RECIPES[g_sel];
     bool known = progress_recipe_known(g_sel);
@@ -54,9 +59,6 @@ static void draw_page(Surface *s)
         text_draw(s, 240 - text_width(buf, 1), 12, buf, COL_INK_SOFT, 1);
         recipe_describe(g_sel, buf, sizeof(buf));
         text_draw_wrapped(s, 14, 30, 130, buf, COL_INK, ALIGN_LEFT);
-        Drink d;
-        make_drink(g_sel, &d);
-        draw_cup(s, 196, -10, &d, 0, 0);
     } else {
         text_draw(s, 14, 12, "??? (recette inconnue)", COL_INK_SOFT, 1);
         if (r->secret) {
@@ -72,6 +74,17 @@ static void draw_page(Surface *s)
             text_draw_wrapped(s, 14, 50, 228, buf, COL_LAV_DARK, ALIGN_LEFT);
         }
     }
+}
+
+// … et le gobelet animé : les garnitures retombent à chaque page
+#define BOOK_CUP_X 196
+#define BOOK_CUP_DY (-10)
+static Rect book_cup_rect(void) { return rect_make(BOOK_CUP_X - 40, 40, 80, 140); }
+
+static void draw_page(Surface *s)
+{
+    if (progress_recipe_known(g_sel))
+        draw_cup(s, BOOK_CUP_X, BOOK_CUP_DY, &g_drink, &g_cup, g_frame, 0, 0);
 }
 
 // Écran bas : la liste
@@ -103,6 +116,7 @@ static void book_enter(void)
 {
     g_sel = 0;
     g_scroll = 0;
+    g_page_drawn = -1;
     ui_polka_background(screen_background(SCREEN_BOTTOM), COL_CREAM, COL_CREAM_DARK);
     screen_set_dynamic(SCREEN_TOP, draw_page);
     screen_set_dynamic(SCREEN_BOTTOM, draw_list);
@@ -124,6 +138,7 @@ static void select_recipe(int i)
 static void book_update(void)
 {
     const Input *in = input_get();
+    g_frame++;
     if (in->down & BTN_UP)
         select_recipe(g_sel - 1);
     if (in->down & BTN_DOWN)
@@ -143,8 +158,24 @@ static void book_update(void)
         scene_change(&SCENE_SHOP);
         return;
     }
+    if (g_page_drawn != g_sel) {
+        g_page_drawn = g_sel;
+        draw_page_background(screen_background(SCREEN_TOP));
+        screen_dirty_all(SCREEN_TOP);
+        // On « prépare » la boisson : les garnitures vont tomber dans le gobelet
+        make_drink(g_sel, &g_drink);
+        g_drink.sealed = g_drink.shaken = false;   // fermé une fois les garnitures tombées
+        cup_anim_reset(&g_cup);
+        g_page_frame = g_frame;
+    }
+    if (g_frame - g_page_frame == 45) {
+        g_drink.sealed = true;
+        g_drink.shaken = RECIPES[g_sel].shaken;
+    }
+    cup_anim_update(&g_cup, &g_drink, false, 0, g_frame);
+    if ((g_frame & 1) == 0)
+        screen_dirty(SCREEN_TOP, book_cup_rect());
     uint32_t h = hash_add(hash_begin(), g_sel);
-    watch(SCREEN_TOP, &w_page, rect_make(0, 0, SCREEN_W, SCREEN_H), h);
     h = hash_add(h, g_scroll);
     watch(SCREEN_BOTTOM, &w_list, rect_make(0, 0, SCREEN_W, SCREEN_H), h);
 }

@@ -63,11 +63,16 @@ void draw_hline(Surface *s, int x, int y, int w, uint16_t c);
 void draw_vline(Surface *s, int x, int y, int h, uint16_t c);
 void draw_pixel(Surface *s, int x, int y, uint16_t c);
 void draw_disc(Surface *s, int cx, int cy, int r, uint16_t c);
+void draw_ellipse(Surface *s, int cx, int cy, int rx, int ry, uint16_t c);
 void draw_line(Surface *s, int x0, int y0, int x1, int y1, uint16_t c);
 
 // Images (pixels 0 ignorés)
 void draw_image(Surface *s, const Image *img, int x, int y);
 void draw_image_flip(Surface *s, const Image *img, int x, int y, bool hflip);
+
+// Peint `color` là où le masque est opaque : pixel clair = couleur,
+// pixel sombre = couleur assombrie (ombre). Sert à teinter vitres et bouteilles.
+void draw_mask(Surface *s, const Image *mask, int x, int y, uint16_t color);
 
 // Copie d'une zone d'une surface vers une autre (mêmes coordonnées)
 void surface_copy_rect(Surface *dst, const Surface *src, Rect r);

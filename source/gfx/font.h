@@ -33,6 +33,10 @@ void text_draw_aligned(Surface *s, int x, int y, int w, const char *utf8,
 int text_draw_wrapped(Surface *s, int x, int y, int w, const char *utf8,
                       uint16_t color, TextAlign align);
 
+// Effet « machine à écrire » : n'affiche que les `n` prochains caractères
+// dessinés (tous appels confondus) ; -1 = sans limite.
+void text_set_reveal(int n);
+
 // Nombre de lignes que prendrait text_draw_wrapped
 int text_count_lines(int w, const char *utf8);
 

@@ -10,6 +10,7 @@
 #include "gfx/palette.h"
 #include "gfx/screen.h"
 #include "plat/plat.h"
+#include "scenes/fx.h"
 #include "scenes/scenes.h"
 #include "scenes/ui.h"
 
@@ -18,6 +19,9 @@ static int g_flash_upgrade = -1, g_flash_timer;
 static bool g_collapsed;
 static bool g_rush;
 static bool g_new_record;
+static uint32_t g_frame;
+
+static void draw_top_fx(Surface *s) { fx_draw(SCREEN_TOP, s); }
 
 static Rect upgrade_rect(int i)
 {
@@ -126,7 +130,10 @@ static void draw_shop(Surface *s)
         bool owned = progress_has_upgrade(i);
         bool affordable = progress()->coins >= u->cost;
         uint16_t fill = owned ? COL_MINT : g_flash_upgrade == i && g_flash_timer ? COL_PINK : COL_CREAM;
-        draw_round_rect(s, r.x, r.y, r.w, r.h, fill, owned ? COL_MINT_DARK : COL_WOOD_DARK);
+        // Les améliorations qu'on peut se payer pulsent doucement
+        uint16_t border = owned ? COL_MINT_DARK
+                        : affordable && ((g_frame / 20) & 1) ? COL_PINK_DARK : COL_WOOD_DARK;
+        draw_round_rect(s, r.x, r.y, r.w, r.h, fill, border);
         text_draw(s, r.x + 4, r.y + 3, u->name, COL_INK, 1);
         text_draw_wrapped(s, r.x + 4, r.y + 14, r.w - 8, u->desc, COL_INK_SOFT, ALIGN_LEFT);
         if (owned) {
@@ -159,6 +166,9 @@ static void day_end_enter(void)
         if (g_new_record)
             p->best_rush = score;
         progress_save();
+        g_frame = 0;
+        fx_clear();
+        screen_set_dynamic(SCREEN_TOP, draw_top_fx);
         draw_rush_summary(screen_background(SCREEN_TOP), d);
         screen_set_dynamic(SCREEN_BOTTOM, draw_rush_bottom);
         plat_sfx(g_new_record ? SFX_UNLOCK : SFX_CASH);
@@ -176,6 +186,9 @@ static void day_end_enter(void)
         p->day = d->number + 1;
     progress_save();
 
+    g_frame = 0;
+    fx_clear();
+    screen_set_dynamic(SCREEN_TOP, draw_top_fx);
     draw_summary(screen_background(SCREEN_TOP), d);
     screen_set_dynamic(SCREEN_BOTTOM, draw_shop);
     watch_reset(&w_shop);
@@ -185,6 +198,13 @@ static void day_end_enter(void)
 static void day_end_update(void)
 {
     const Input *in = input_get();
+    g_frame++;
+    // Pièces qui jaillissent et étincelles pendant le bilan
+    if (!g_collapsed && (g_frame % 24) == 0 && g_frame < 60 * 8)
+        fx_emit(SCREEN_TOP, FX_COIN, 40 + (int)(g_frame * 37 % 176), 150, 2, 0);
+    if ((g_frame % 30) == 15)
+        fx_emit(SCREEN_TOP, g_collapsed ? FX_SMOKE : FX_SPARKLE, 128, 20, g_collapsed ? 1 : 3, 0);
+    fx_update();
     if (scene_transitioning())
         return;
     if (g_rush) {
@@ -216,6 +236,7 @@ static void day_end_update(void)
     uint32_t h = hash_add(hash_begin(), (int32_t)progress()->coins);
     h = hash_add(h, progress()->upgrades);
     h = hash_add(h, g_flash_timer ? g_flash_upgrade : -1);
+    h = hash_add(h, (int32_t)(g_frame / 20));
     watch(SCREEN_BOTTOM, &w_shop, rect_make(0, 0, SCREEN_W, SCREEN_H), h);
 }
 

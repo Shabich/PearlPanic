@@ -120,6 +120,21 @@ void draw_disc(Surface *s, int cx, int cy, int r, uint16_t c)
     }
 }
 
+void draw_ellipse(Surface *s, int cx, int cy, int rx, int ry, uint16_t c)
+{
+    if (rx <= 0 || ry <= 0) {
+        draw_pixel(s, cx, cy, c);
+        return;
+    }
+    long rx2 = (long)rx * rx, ry2 = (long)ry * ry, lim = rx2 * ry2 + rx2 * ry2 / (rx + ry);
+    for (int dy = -ry; dy <= ry; dy++) {
+        int dx = 0;
+        while ((long)(dx + 1) * (dx + 1) * ry2 + (long)dy * dy * rx2 <= lim)
+            dx++;
+        draw_hline(s, cx - dx, cy + dy, 2 * dx + 1, c);
+    }
+}
+
 void draw_line(Surface *s, int x0, int y0, int x1, int y1, uint16_t c)
 {
     int dx = x1 > x0 ? x1 - x0 : x0 - x1, sx = x0 < x1 ? 1 : -1;
@@ -155,6 +170,23 @@ void draw_image_flip(Surface *s, const Image *img, int x, int y, bool hflip)
 void draw_image(Surface *s, const Image *img, int x, int y)
 {
     draw_image_flip(s, img, x, y, false);
+}
+
+void draw_mask(Surface *s, const Image *mask, int x, int y, uint16_t color)
+{
+    Rect r = rect_intersect(rect_make(x, y, mask->w, mask->h), s->clip);
+    if (rect_empty(r))
+        return;
+    uint16_t shadow = color_darken(color, 5);
+    for (int j = 0; j < r.h; j++) {
+        const uint16_t *src = mask->px + (r.y - y + j) * mask->w + (r.x - x);
+        uint16_t *dst = s->px + (r.y + j) * s->stride + r.x;
+        for (int i = 0; i < r.w; i++) {
+            uint16_t p = src[i];
+            if (p)
+                dst[i] = (p & 31) > 20 ? color : shadow;
+        }
+    }
 }
 
 void surface_copy_rect(Surface *dst, const Surface *src, Rect r)

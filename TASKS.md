@@ -44,7 +44,7 @@ Les dépendances sont notées `→ dépend de`.
 - [x] **1.4 [P0]** Configuration vidéo : modes et banques VRAM pour les deux écrans, choix de l'écran tactile en bas. → 1.1
 - [x] **1.5 [P0]** Gestionnaire de sprites : allocation d'entrées OAM, chargement de tuiles/palettes, priorité/couche. → 1.4 *(remplacé par le rendu logiciel + compositeur de `gfx/screen.c` ; les sprites matériels restent possibles pour du polish)*
 - [x] **1.6 [P0]** Gestionnaire de fonds : chargement tilemaps + palettes, scrolling. → 1.4 *(fonds bitmap 16 bits + recomposition des zones modifiées)*
-- [ ] **1.7 [P1]** Animation de sprites (frames, durée, boucle / one-shot). → 1.5
+- [x] **1.7 [P1]** Animation de sprites (frames, durée, boucle / one-shot). → 1.5 *(clients : clignement, parole, marche ; gobelet, décor et interface animés)*
 - [x] **1.8 [P1]** Rendu de texte : police bitmap pixel art 8×8 (ou 8×16), accents français. → 1.6 *(police 6×11 Latin-1 provisoire, issue de Pillow)*
 - [x] **1.9 [P1]** Tweens/easing (déplacement, rebond, scale via affine) pour le « juice ». → 1.5 *(`core/tween.h` : arrivée des clients qui rebondit, départs, pièces)*
 - [x] **1.10 [P1]** Transitions de scène (fondu via registres de luminosité `REG_MASTER_BRIGHT`). → 1.2 *(fondu au blanc via `setBrightness`, 8 frames)*
@@ -53,15 +53,15 @@ Les dépendances sont notées `→ dépend de`.
 
 ## 2. Direction artistique & assets
 
-- [ ] **2.1 [P0]** Définir la palette pastel maître (ex. 32–48 couleurs) et la découper en palettes de 16 couleurs.
+- [x] **2.1 [P0]** Définir la palette pastel maître (ex. 32–48 couleurs) et la découper en palettes de 16 couleurs. *(`tools/art/palette.py`)*
 - [x] **2.2 [P0]** Placeholders : rectangles colorés pour gobelet, ingrédients, client — permet de coder sans art final.
-- [ ] **2.3 [P1]** Décor écran haut : intérieur de boutique cocooning (comptoir de profil, plantes, guirlandes). *(placeholder en place, art final à faire)*
-- [ ] **2.4 [P1]** Décor écran bas : plan de travail (zone gobelet, bacs d'ingrédients, shaker, scelleuse, poubelle). *(placeholder en place, art final à faire)*
-- [ ] **2.5 [P1]** Gobelet : vide, niveaux de remplissage, couches de couleur (thé, lait, sirop), couvercle scellé, paille. *(placeholder en place, art final à faire)*
+- [x] **2.3 [P1]** Décor écran haut : intérieur de boutique cocooning (comptoir de profil, plantes, guirlandes). *(décor + guirlande, nuages, plantes animés)*
+- [x] **2.4 [P1]** Décor écran bas : plan de travail (zone gobelet, bacs d'ingrédients, shaker, scelleuse, poubelle). *(crédence, plan de travail, tireuses/pompes/bacs en sprites)*
+- [x] **2.5 [P1]** Gobelet : vide, niveaux de remplissage, couches de couleur (thé, lait, sirop), couvercle scellé, paille. *(gobelet animé : vagues, filet, bulles, garnitures, couvercle, paille)*
 - [ ] **2.6 [P1]** Ingrédients : perles tapioca, popping boba, jelly, thés (noir, vert, jasmin, matcha), laits, sirops (taro, fraise, mangue, brown sugar), glace, toppings mignons (nuage de crème, étoiles…). *(placeholder en place, art final à faire)*
-- [ ] **2.7 [P1]** Clients : 6–10 personnages chibi (animaux / créatures), chacun avec animations idle, entrée, attente, stress (3 niveaux), content, furieux, départ. *(placeholder en place, art final à faire)*
+- [x] **2.7 [P1]** Clients : 6–10 personnages chibi (animaux / créatures), chacun avec animations idle, entrée, attente, stress (3 niveaux), content, furieux, départ. *(6 espèces × 4 humeurs × 3 poses, ombrées)*
 - [ ] **2.8 [P1]** UI : bulles de commande, jauge de stress, pièces, icônes, boutons tactiles. *(placeholder en place, art final à faire)*
-- [ ] **2.9 [P1]** Écran titre + logo « Pearl Panic ». *(placeholder en place, art final à faire)*
+- [x] **2.9 [P1]** Écran titre + logo « Pearl Panic ». *(devanture animée)*
 - [x] **2.10 [P2]** Effets : particules (cœurs, étoiles, gouttes, fumée de colère). *(`scenes/fx.c` : cœurs, étoiles, pièces, sueur, fumée, éclaboussures)*
 - [x] **2.11 [P0]** Pipeline : fichiers `.grit` par asset, nommage cohérent, vérification du budget VRAM. → 0.3 *(PNG → C via `make assets`)*
 

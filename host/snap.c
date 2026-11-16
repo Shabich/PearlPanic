@@ -29,6 +29,17 @@ static void snap(const char *name)
     host_write_ppm(path);
 }
 
+// Séquence de captures (pour vérifier les animations) : prefix_00, prefix_01…
+static void snap_seq(const char *prefix, int count, int interval)
+{
+    char name[64];
+    for (int i = 0; i < count; i++) {
+        snprintf(name, sizeof(name), "seq_%s_%02d", prefix, i);
+        snap(name);
+        frames(interval);
+    }
+}
+
 static void touch(int x, int y) { g_in.touching = true; g_in.tx = x; g_in.ty = y; }
 static void release(void) { g_in.touching = false; }
 
@@ -81,7 +92,9 @@ int main(int argc, char **argv)
     snap("01_title");
 
     press(BTN_START);
-    frames(FPS + ARRIVE_FRAMES + 10);
+    frames(FPS + 12);
+    snap_seq("arrive", 8, 4);
+    frames(4);
     snap("02_day1_first_customer");
 
     // Thé au lait perles : thé noir 70, lait 30, perles x2
@@ -109,7 +122,7 @@ int main(int argc, char **argv)
     snap("06_sealed");
     center(action_rect(ACT_SERVE), &x, &y);
     tap(x, y);
-    frames(10);
+    snap_seq("leave", 10, 4);
     snap("07_served");
 
     // On laisse les clients attendre : stress, puis départs fâchés
@@ -179,6 +192,39 @@ int main(int argc, char **argv)
     tap(x, y);
     frames(4);
     snap("18_two_cups_special");
+
+    // Séquences d'animation sur le gobelet 1 : versement, garnitures, glaçons, secousse
+    tap(cup_cx_of(0, 2), 150);
+    center(action_rect(ACT_TRASH), &x, &y);
+    tap(x, y);
+    center(tap_rect(0), &x, &y);
+    touch(x, y);
+    frames(30);
+    snap_seq("pour", 6, 3);
+    frames(20);
+    release();
+    frames(1);
+    center(bin_rect(3), &x, &y);            // glaçons
+    tap(x, y);
+    tap(x, y);
+    center(bin_rect(0), &x, &y);            // perles
+    tap(x, y);
+    snap_seq("drop", 8, 3);
+    frames(40);
+    snap_seq("float", 6, 6);
+    center(action_rect(ACT_SEAL), &x, &y);
+    tap(x, y);
+    snap_seq("seal", 6, 4);
+    // secousse : va-et-vient sur le gobelet
+    touch(cup_cx_of(0, 2), 130);
+    frames(1);
+    for (int k = 0; k < 8; k++) {
+        touch(cup_cx_of(0, 2) + ((k & 1) ? -10 : 10), 130);
+        frames(3);
+    }
+    release();
+    frames(1);
+    snap_seq("mix", 6, 5);
     printf("captures écrites dans %s\n", g_dir);
     return 0;
 }
