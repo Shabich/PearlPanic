@@ -6,6 +6,7 @@ puis `make assets` (tools/png2c.py) les convertit en C.
 Transparence : canal alpha (pixel alpha < 128 = transparent).
 """
 import sys
+from collections import Counter
 from pathlib import Path
 from PIL import Image, ImageDraw
 
@@ -142,15 +143,61 @@ def icon_petals():
     return img
 
 
+def shrink_keep_dark(img, w, h):
+    """Réduction de pixel art : chaque pixel cible prend en priorité un pixel foncé
+    de son bloc source (yeux, nez, contours), sinon la couleur majoritaire."""
+    sw, sh = img.size
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    for y in range(h):
+        for x in range(w):
+            x0, y0 = x * sw // w, y * sh // h
+            x1, y1 = max((x + 1) * sw // w, x0 + 1), max((y + 1) * sh // h, y0 + 1)
+            block = [img.getpixel((i, j)) for i in range(x0, x1) for j in range(y0, y1)]
+            opaque = [c for c in block if c[3] > 128]
+            if len(opaque) * 2 < len(block):
+                continue
+            dark = [c for c in opaque if sum(c[:3]) < 200]
+            out.putpixel((x, y), dark[0] if dark else Counter(opaque).most_common(1)[0][0])
+    return out
+
+
 def rom_icon():
-    img = Image.new("RGB", (32, 32), (178, 230, 206))
+    """Icône de la ROM (32x32, 15 couleurs : ndstool réserve la 16e à la transparence) : Perle et son bubble tea sous le store rose,
+    comme le logo du README. Lit gfx/heroine/perle_happy.png (généré avant)."""
+    mint, mint_light, pink, pink_edge = (178, 230, 206), (222, 248, 234), (255, 194, 210), (240, 146, 176)
+    img = Image.new("RGBA", (32, 32), mint)
     d = ImageDraw.Draw(img)
-    d.rectangle((19, 0, 21, 8), fill=(214, 120, 140))
-    d.polygon([(6, 6), (25, 6), (22, 31), (9, 31)], fill=(222, 184, 150), outline=(60, 40, 50))
-    d.line((6, 6, 25, 6), fill=(255, 255, 255))
-    for x, y in ((11, 27), (15, 28), (19, 27), (13, 24), (17, 25)):
-        d.ellipse((x - 1, y - 1, x + 1, y + 1), fill=(74, 44, 42))
-    img.quantize(colors=16).save(ROOT / "icon.png")
+    for y in range(8, 32, 5):                                   # pois
+        for x in range((y // 5) % 2 * 2 + 1, 32, 5):
+            d.point((x, y), fill=mint_light)
+    for x in range(32):                                         # store rayé + festons
+        c = pink if (x // 3) % 2 == 0 else WHITE
+        d.line((x, 0, x, 4), fill=c)
+        if x % 3 == 1:
+            d.point((x, 5), fill=c)
+    d.line((0, 4, 31, 4), fill=pink_edge)
+    for x in range(1, 32, 3):
+        d.point((x, 6), fill=pink_edge)
+
+    src = Image.open(GFX / "heroine/perle_happy.png").convert("RGBA").crop((3, 4, 39, 48))
+    perle = shrink_keep_dark(src, 25, 31)
+    # Retouches : la réduction aplatit les yeux plissés et grossit le nez
+    skin, ink = perle.getpixel((10, 15)), perle.getpixel((7, 14))
+    for x in range(5, 20):
+        if perle.getpixel((x, 14))[:3] == ink[:3]:
+            perle.putpixel((x, 14), skin)
+    for ex in (6, 16):                                          # yeux « ^ »
+        for p in ((ex, 15), (ex + 1, 14), (ex + 2, 15)):
+            perle.putpixel(p, ink)
+    for y in range(15, 18):
+        for x in range(10, 15):
+            if sum(perle.getpixel((x, y))[:3]) < 300:
+                perle.putpixel((x, y), skin)
+    for p in ((11, 15), (12, 15), (11, 16), (12, 16)):          # nez 2x2
+        perle.putpixel(p, ink)
+    img.alpha_composite(perle, (4, 1))
+    img.convert("RGB").quantize(colors=15, method=Image.Quantize.MEDIANCUT,
+                                dither=Image.Dither.NONE).save(ROOT / "icon.png")
 
 
 def save(img, rel):
