@@ -6,6 +6,29 @@ assemblage des boissons au stylet, clients mignons mais très impatients, recett
 
 Le découpage du projet en sous-tâches est dans [`TASKS.md`](TASKS.md).
 
+## Captures
+
+Les deux écrans de la DS (haut et bas), captés par `make snap`.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/01_title.png" width="200" alt="Écran titre"><br>Titre</td>
+    <td align="center"><img src="docs/screenshots/02_intro_1.png" width="200" alt="Cinématique d'introduction"><br>Introduction</td>
+    <td align="center"><img src="docs/screenshots/03_map_w1.png" width="200" alt="Carte du monde 1"><br>Carte du Quartier des Lanternes</td>
+    <td align="center"><img src="docs/screenshots/04_level_1.png" width="200" alt="Premier niveau"><br>Au comptoir</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/06_served.png" width="200" alt="Boisson servie"><br>Boisson servie</td>
+    <td align="center"><img src="docs/screenshots/22_shop_plage.png" width="200" alt="Bar de la plage"><br>Bar de la plage</td>
+    <td align="center"><img src="docs/screenshots/22_shop_ville.png" width="200" alt="Bar de la ville la nuit"><br>Ville la nuit</td>
+    <td align="center"><img src="docs/screenshots/21_map_foret.png" width="200" alt="Carte de la forêt"><br>Forêt enchantée</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/09_journal.png" width="200" alt="Journal"><br>Journal</td>
+    <td align="center"><img src="docs/screenshots/10_book.png" width="200" alt="Livre de recettes"><br>Livre de recettes</td>
+  </tr>
+</table>
+
 ## Construire et jouer
 
 | Commande | Effet |
