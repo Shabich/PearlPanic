@@ -5,6 +5,7 @@
 
 #include "game/progress.h"
 #include "game/recipes.h"
+#include "game/specials.h"
 
 // --- Difficulté (tâche 6.4)
 
@@ -63,6 +64,8 @@ void day_start(Day *d, int number, uint32_t seed)
         if (!RECIPES[i].secret && RECIPES[i].day <= d->number && !progress_recipe_known(i))
             can_discover = true;
     d->objective = objective_for_day(d->number, can_discover);
+    d->special_today = (int8_t)special_due(d->number, progress()->special_steps);
+    d->special_result = -1;
 }
 
 void day_start_rush(Day *d, int number, uint32_t seed)
@@ -70,6 +73,7 @@ void day_start_rush(Day *d, int number, uint32_t seed)
     day_start(d, number, seed);
     d->endless = true;
     d->objective.type = OBJ_NONE;
+    d->special_today = -1;
 }
 
 int day_stress_level(const Customer *c)
@@ -150,12 +154,29 @@ static void spawn(Day *d)
     c->recipe = (int8_t)pick_recipe(d, &c->riddle);
     c->seq = d->next_seq++;
     c->last_score = -1;
+    c->special = -1;
+
+    // Un habitué passe aujourd'hui ?
+    bool special = d->special_today >= 0 && !d->special_spawned && d->frame >= SPECIAL_ARRIVAL;
+    if (special) {
+        int s = d->special_today;
+        int recipe = special_recipe(s, progress()->special_steps[s]);
+        if (recipe >= 0) {
+            c->special = (int8_t)s;
+            c->type = SPECIALS[s].type;
+            c->recipe = (int8_t)recipe;
+            c->riddle = !progress_recipe_known(recipe);
+        }
+        d->special_spawned = true;
+    }
 
     int32_t p = d->endless ? rush_patience(d->number, d->frame) : day_base_patience(d->number);
     p += recipe_complexity(c->recipe) * 2 * FPS;
     if (c->riddle)
         p += 10 * FPS;
     p = p * customer_type(c->type)->patience_pct / 100;
+    if (c->special >= 0)
+        p = p * 3 / 2;   // les habitués sont plus indulgents
     if (progress_has_upgrade(UPG_CUSHIONS))
         p = p * 125 / 100;
     c->patience = c->patience_max = p;
@@ -266,7 +287,9 @@ void day_update(Day *d)
                 c->state = CS_LEAVING;
                 c->anim = 0;
                 c->happy = false;
-                c->says = "Trop long ! Je m'en vais !";
+                c->says = c->special >= 0 ? "Je repasserai un autre jour…" : "Trop long ! Je m'en vais !";
+                if (c->special >= 0)
+                    d->special_result = 0;
                 d->lost++;
                 change_ambiance(d, -AMBIANCE_ANGRY_LEAVE);
                 push_event(d, EV_LEAVE_ANGRY, i, 0);
@@ -363,6 +386,22 @@ bool day_serve(Day *d, const Drink *drink, ServeResult *out)
     else {
         snprintf(c->says_buf, sizeof(c->says_buf), "%s", out->hint ? out->hint : "Bof…");
         c->says = c->says_buf;
+    }
+    // Habitué : l'histoire avance si la visite est réussie
+    if (c->special >= 0) {
+        const SpecialCustomer *sp = &SPECIALS[c->special];
+        uint8_t *step = &progress()->special_steps[c->special];
+        if (out->happy && *step < SPECIAL_VISITS) {
+            c->says = sp->visits[*step].thanks;
+            (*step)++;
+            out->tip += sp->tip_bonus + (*step == SPECIAL_VISITS ? sp->final_bonus : 0);
+            d->tips += sp->tip_bonus + (*step == SPECIAL_VISITS ? sp->final_bonus : 0);
+            d->special_result = 1;
+            push_event(d, EV_SPECIAL_DONE, slot, *step);
+        } else {
+            c->says = "Pas tout à fait… Je repasserai !";
+            d->special_result = 0;
+        }
     }
     push_event(d, EV_SERVED, slot, out->score);
     ensure_active(d);

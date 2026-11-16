@@ -78,7 +78,7 @@ Les dépendances sont notées `→ dépend de`.
 - [x] **3.9 [P0]** Bouton / geste « Servir » qui envoie la boisson au client actif. → 3.1
 - [x] **3.10 [P1]** Rendu visuel du gobelet qui reflète exactement son contenu (couches, perles au fond). → 2.5, 3.1
 - [x] **3.11 [P1]** Feedback immédiat : sons, petite secousse, éclaboussure.
-- [ ] **3.12 [P2]** Gestion de 2 gobelets en parallèle (montée en difficulté).
+- [x] **3.12 [P2]** Gestion de 2 gobelets en parallèle (montée en difficulté). *(amélioration « 2e gobelet », 60 pièces ; toucher un gobelet le rend actif)*
 
 ## 4. Clients & jauge de stress (écran haut)
 
@@ -91,7 +91,7 @@ Les dépendances sont notées `→ dépend de`.
 - [x] **4.7 [P1]** Personnalités : patience, pourboire, exigence différentes selon le type de client. → 4.1
 - [x] **4.8 [P1]** Sélection du client actif (tap sur l'écran du haut impossible → croix gauche/droite ou icônes sur l'écran bas). → 1.3
 - [x] **4.9 [P1]** **Ambiance de la boutique** : jauge globale « cocooning » qui baisse avec les clients stressés/furieux ; si elle tombe à zéro, fin de journée anticipée. → 4.3
-- [ ] **4.10 [P2]** Clients spéciaux récurrents avec mini-histoire.
+- [x] **4.10 [P2]** Clients spéciaux récurrents avec mini-histoire. *(Mamie Lapine, Chef Panda, Grenouille poète : 3 visites chacun, accessoires, bonus)*
 
 ## 5. Recettes & découverte
 
@@ -162,5 +162,4 @@ et `scenes/` ne dépendent **pas** de libnds → tout le jeu tourne aussi sur PC
 1. Test sur vraie DS (9.2, 9.3) : fluidité du rendu logiciel, précision du stylet, sauvegarde sur linker.
 2. Playtest et équilibrage (9.4) : patience, vitesse de l'ambiance, prix, objectifs, cadence du Rush.
 3. Art final (2.x) en remplaçant les PNG de `gfx/` ; vraie musique (7.2) et vrais sons (7.3).
-4. Restent en P2 : 1.7 (animations image par image, avec l'art final), 3.12 (deux gobelets),
-   4.10 (clients spéciaux), 9.5 (DSi/3DS), 9.6 (release).
+4. Restent en P2 : 1.7 (animations image par image, avec l'art final), 9.5 (DSi/3DS), 9.6 (release).

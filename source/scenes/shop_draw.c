@@ -7,6 +7,7 @@
 #include "core/input.h"
 #include "game/progress.h"
 #include "game/recipes.h"
+#include "game/specials.h"
 #include "gen/assets.h"
 #include "gfx/font.h"
 #include "gfx/palette.h"
@@ -79,7 +80,7 @@ void recipe_describe(int recipe, char *buf, int size)
 static const char *tutorial_step(const ShopView *v, int *step_id)
 {
     const Day *d = &v->session->day;
-    const Drink *k = &v->session->drink;
+    const Drink *k = session_drink(v->session);
     static char buf[64];
     *step_id = 0;
     if (d->number != 1 || d->active < 0)
@@ -281,11 +282,14 @@ void draw_cup(Surface *s, int cx, int dy, const Drink *d, int wobble, int pourin
 
 uint32_t shop_cup_hash(const ShopView *v)
 {
-    const Drink *d = &v->session->drink;
     uint32_t h = hash_begin();
-    for (int i = 0; i < ING_COUNT; i++)
-        h = hash_add(h, d->qty[i]);
-    h = hash_add(h, d->sealed | (d->shaken << 1) | (d->overflowed << 2));
+    for (int c = 0; c < v->session->cup_count; c++) {
+        const Drink *d = &v->session->cups[c];
+        for (int i = 0; i < ING_COUNT; i++)
+            h = hash_add(h, d->qty[i]);
+        h = hash_add(h, d->sealed | (d->shaken << 1) | (d->overflowed << 2));
+    }
+    h = hash_add(h, v->session->active_cup);
     h = hash_add(h, v->wobble);
     h = hash_add(h, v->pouring);
     h = hash_add(h, v->paused);
@@ -369,7 +373,7 @@ static void draw_bin(Surface *s, int i)
 
 uint32_t shop_actions_hash(const ShopView *v)
 {
-    const Drink *d = &v->session->drink;
+    const Drink *d = session_drink(v->session);
     uint32_t h = hash_add(hash_begin(), drink_is_empty(d));
     h = hash_add(h, d->sealed);
     h = hash_add(h, v->session->day.active >= 0);
@@ -378,7 +382,7 @@ uint32_t shop_actions_hash(const ShopView *v)
 
 static void draw_actions(Surface *s)
 {
-    const Drink *d = &V->session->drink;
+    const Drink *d = session_drink(V->session);
     bool empty = drink_is_empty(d);
     draw_bin(s, 4);   // crème, en haut de la colonne de droite
     ui_button(s, action_rect(ACT_SEAL), d->sealed ? "Fermé" : "Fermer",
@@ -423,8 +427,17 @@ void shop_draw_bottom(Surface *s)
     draw_actions(s);
 
     if (visible(s, cup_rect())) {
+        const ShopSession *ss = V->session;
         int pour = V->pouring >= 0 ? (int)TAP_INGS[V->pouring] : 0;
-        draw_cup(s, CUP_CX, 0, &V->session->drink, V->wobble, pour);
+        for (int i = 0; i < ss->cup_count; i++) {
+            bool active = i == ss->active_cup;
+            int cx = cup_cx_of(i, ss->cup_count);
+            // Sous-verre : rose pour le gobelet actif quand il y en a deux
+            uint16_t coaster = ss->cup_count == 2 && active ? COL_PINK_DARK : COL_MINT_DARK;
+            draw_rect(s, cx - 31, CUP_BOT_Y + 3, 63, 6, coaster);
+            draw_rect(s, cx - 27, CUP_BOT_Y + 9, 55, 2, color_darken(coaster, 4));
+            draw_cup(s, cx, 0, &ss->cups[i], active ? V->wobble : 0, active ? pour : 0);
+        }
     }
 
     if (V->held != ING_NONE) {
@@ -437,6 +450,34 @@ void shop_draw_bottom(Surface *s)
 }
 
 // ================================================================ Écran haut
+
+// Accessoire dessiné par-dessus l'image d'un habitué (x, y = coin de l'image 40x48)
+static void draw_accessory(Surface *s, int acc, int x, int y)
+{
+    switch (acc) {
+    case ACC_BOW_GLASSES:
+        draw_disc(s, x + 15, y + 12, 3, COL_PINK_DARK);
+        draw_disc(s, x + 25, y + 12, 3, COL_PINK_DARK);
+        draw_rect(s, x + 19, y + 11, 3, 3, COL_PINK);
+        draw_rect_outline(s, x + 9, y + 23, 8, 7, COL_INK);
+        draw_rect_outline(s, x + 22, y + 23, 8, 7, COL_INK);
+        draw_hline(s, x + 17, y + 25, 5, COL_INK);
+        break;
+    case ACC_CHEF_HAT:
+        draw_rect(s, x + 10, y + 9, 21, 6, COL_WHITE);
+        draw_hline(s, x + 10, y + 14, 21, COL_GREY);
+        draw_disc(s, x + 14, y + 6, 5, COL_WHITE);
+        draw_disc(s, x + 20, y + 3, 6, COL_WHITE);
+        draw_disc(s, x + 26, y + 6, 5, COL_WHITE);
+        break;
+    case ACC_BERET:
+        draw_disc(s, x + 18, y + 6, 7, COL_LAV_DARK);
+        draw_rect(s, x + 9, y + 7, 20, 3, COL_LAV_DARK);
+        draw_rect(s, x + 18, y - 2, 2, 3, COL_LAV_DARK);
+        draw_disc(s, x + 15, y + 4, 2, COL_LAVENDER);
+        break;
+    }
+}
 
 static int mood_of(const Customer *c)
 {
@@ -521,13 +562,16 @@ static void draw_slot(Surface *s, int i)
     Rect saved = s->clip;
     s->clip = rect_intersect(s->clip, rect_make(0, HUD_H, SCREEN_W, COUNTER_Y - HUD_H));
     draw_image(s, customer_image(c->type, mood_of(c)), cx - 20 + dx, CUSTOMER_Y + dy);
+    if (c->special >= 0)
+        draw_accessory(s, SPECIALS[c->special].accessory, cx - 20 + dx, CUSTOMER_Y + dy);
     s->clip = saved;
 
     bool active = d->active == i;
     Rect b = rect_make(cx - BUBBLE_W / 2, BUBBLE_Y, BUBBLE_W, BUBBLE_H);
 
     if (c->state == CS_WAITING || (c->state == CS_ARRIVING && c->anim > ARRIVE_FRAMES / 2)) {
-        ui_bubble(s, b, active ? COL_PINK_PALE : COL_WHITE, active ? COL_PINK_DARK : COL_INK_SOFT);
+        uint16_t border = c->special >= 0 ? COL_WARN : active ? COL_PINK_DARK : COL_INK_SOFT;
+        ui_bubble(s, b, active ? COL_PINK_PALE : COL_WHITE, border);
         if (active)
             draw_round_rect(s, b.x + 1, b.y + 1, b.w - 2, b.h - 2, COL_PINK_PALE, COL_PINK);
         if (c->riddle) {
@@ -619,7 +663,23 @@ static void draw_panel(Surface *s)
     }
 
     const Customer *c = &d->slots[d->active];
-    char line[96];
+    char line[128];
+    if (c->special >= 0) {
+        // Habitué : son nom, sa réplique, puis la commande si elle est connue
+        const SpecialCustomer *sp = &SPECIALS[c->special];
+        int step = progress()->special_steps[c->special];
+        if (step >= SPECIAL_VISITS)
+            step = SPECIAL_VISITS - 1;
+        snprintf(line, sizeof(line), "%s (visite %d/%d)", sp->name, step + 1, SPECIAL_VISITS);
+        text_draw(s, x, y, line, COL_WOOD_DARK, 1);
+        snprintf(line, sizeof(line), "« %s »", sp->visits[step].hello);
+        int lines = text_draw_wrapped(s, x, y + FONT_LINE + 2, w, line, COL_INK, ALIGN_LEFT);
+        if (!c->riddle && lines < 3) {
+            recipe_describe(c->recipe, line, sizeof(line));
+            text_draw_wrapped(s, x, y + FONT_LINE * (lines + 1) + 3, w, line, COL_INK_SOFT, ALIGN_LEFT);
+        }
+        return;
+    }
     if (c->riddle) {
         snprintf(line, sizeof(line), "%s demande… ???", customer_type(c->type)->name);
         text_draw(s, x, y, line, COL_LAV_DARK, 1);
@@ -694,9 +754,6 @@ static void draw_bottom_background(Surface *s)
     draw_rect(s, 0, 0, SCREEN_W, PUMP_Y + PUMP_H + 3, COL_WOOD_LIGHT);
     draw_hline(s, 0, PUMP_Y + PUMP_H + 3, SCREEN_W, COL_WOOD_DARK);
     draw_hline(s, 0, PUMP_Y - 2, SCREEN_W, color_mix(COL_WOOD_LIGHT, COL_WOOD_DARK, 100));
-    // Sous-verre du gobelet
-    draw_rect(s, CUP_CX - 34, CUP_BOT_Y + 3, 69, 6, COL_MINT_DARK);
-    draw_rect(s, CUP_CX - 30, CUP_BOT_Y + 9, 61, 2, color_darken(COL_MINT_DARK, 4));
 }
 
 void shop_draw_backgrounds(const ShopView *v)

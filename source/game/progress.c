@@ -16,6 +16,7 @@ static const UpgradeInfo UPGRADES[UPG_COUNT] = {
     [UPG_CUSHIONS] = { "Coussins doux", "Les clients patientent +25 %.",     35 },
     [UPG_GARLANDS] = { "Guirlandes",       "L'ambiance baisse 2x moins vite.",    45 },
     [UPG_TIP_JAR]  = { "Pot à pièces", "+1 pièce par pourboire.",             30 },
+    [UPG_SECOND_CUP] = { "2e gobelet",   "Deux boissons à la fois.",    60 },
 };
 
 Progress *progress(void) { return &g_progress; }
@@ -82,6 +83,8 @@ void progress_serialize(const Progress *p, uint8_t out[SAVE_SIZE])
     out[25] = p->sfx_volume;
     out[26] = p->lefty ? 1 : 0;
     put32(out + 28, p->best_rush);
+    for (int i = 0; i < 4; i++)
+        out[32 + i] = p->special_steps[i];
     put32(out + SAVE_SIZE - 4, checksum(out, SAVE_SIZE - 4));
 }
 
@@ -101,6 +104,8 @@ bool progress_deserialize(Progress *p, const uint8_t in[SAVE_SIZE])
     p->sfx_volume = in[25] > 4 ? 4 : in[25];
     p->lefty = in[26] & 1;
     p->best_rush = get32(in + 28);
+    for (int i = 0; i < 4; i++)
+        p->special_steps[i] = in[32 + i] > 3 ? 3 : in[32 + i];
     if (p->day == 0)
         p->day = 1;
     return true;

@@ -83,6 +83,15 @@ static inline Rect sel_prev_rect(void) { return rect_make(SEL_X, SEL_Y, 20, SEL_
 static inline Rect sel_next_rect(void) { return rect_make(SEL_X + SEL_W - 20, SEL_Y, 20, SEL_H); }
 static inline Rect cup_rect(void) { return rect_make(CUP_AREA_X, CUP_AREA_Y, CUP_AREA_W, CUP_AREA_H); }
 
+// Position des gobelets : un seul au centre, ou deux côte à côte
+static inline int cup_cx_of(int i, int count) { return count == 2 ? (i ? 158 : 98) : CUP_CX; }
+static inline Rect cup_hit_rect(int i, int count)
+{
+    if (count != 2)
+        return cup_rect();
+    return rect_make(cup_cx_of(i, count) - 30, CUP_AREA_Y, 60, CUP_AREA_H);
+}
+
 // --------------------------------------------------------------- Écran haut
 #define HUD_H        16
 #define COUNTER_Y    124

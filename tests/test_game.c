@@ -12,6 +12,7 @@
 #include "game/drink.h"
 #include "game/progress.h"
 #include "game/recipes.h"
+#include "game/specials.h"
 #include "gfx/canvas.h"
 #include "gfx/font.h"
 
@@ -255,6 +256,78 @@ static void test_rush(void)
     CHECK(rush_spawn_interval(60 * 60 * FPS) >= 4 * FPS);
 }
 
+static void test_specials(void)
+{
+    // Toutes les commandes existent et sont réalisables le jour de la visite
+    for (int s = 0; s < SPECIAL_COUNT; s++) {
+        for (int v = 0; v < SPECIAL_VISITS; v++) {
+            int r = special_recipe(s, v);
+            if (r < 0)
+                printf("  recette introuvable : %s\n", SPECIALS[s].visits[v].recipe);
+            CHECK(r >= 0);
+            if (r >= 0) {
+                CHECK(RECIPES[r].day <= special_visit_day(s, v));
+                CHECK(recipe_min_day(&RECIPES[r]) <= special_visit_day(s, v));
+            }
+            CHECK(text_width(SPECIALS[s].visits[v].thanks, 1) > 0);
+        }
+    }
+
+    // Le jour 1, Mamie Lapine passe et commande le classique
+    progress_new();
+    Day day;
+    day_start(&day, 1, 3);
+    CHECK(day.special_today == 0);
+    int slot = -1;
+    for (int f = 0; f < DAY_DURATION && slot < 0; f++) {
+        day_update(&day);
+        for (int e = 0; e < day.event_count; e++)
+            if (day.events[e].type == EV_ARRIVE && day.slots[day.events[e].slot].special >= 0)
+                slot = day.events[e].slot;
+        // On sert parfaitement tout le monde pour libérer les places
+        if (day.active >= 0 && day.slots[day.active].state == CS_WAITING &&
+            day.slots[day.active].special < 0) {
+            Drink d;
+            make_perfect(&d, &RECIPES[day.slots[day.active].recipe]);
+            ServeResult r;
+            day_serve(&day, &d, &r);
+        }
+    }
+    CHECK(slot >= 0);
+    if (slot >= 0) {
+        Customer *c = &day.slots[slot];
+        CHECK(c->type == SPECIALS[0].type && c->recipe == special_recipe(0, 0) && !c->riddle);
+        while (c->state != CS_WAITING)
+            day_update(&day);
+        day_select_slot(&day, slot);
+        Drink d;
+        make_perfect(&d, &RECIPES[c->recipe]);
+        ServeResult r;
+        int tips_before = day.tips;
+        CHECK(day_serve(&day, &d, &r));
+        CHECK(progress()->special_steps[0] == 1);
+        CHECK(day.special_result == 1);
+        CHECK(day.tips - tips_before == r.tip && r.tip >= SPECIALS[0].tip_bonus);
+        CHECK(c->says == SPECIALS[0].visits[0].thanks);
+    }
+    // Visite suivante : pas avant le jour 3 ; le jour 2 c'est le Chef Panda
+    CHECK(special_due(2, progress()->special_steps) == 1);
+    uint8_t steps[4] = { 1, 1, 0, 0 };
+    CHECK(special_due(2, steps) == -1);
+    CHECK(special_due(3, steps) == 0);
+    uint8_t done[4] = { 3, 3, 3, 0 };
+    CHECK(special_due(50, done) == -1);
+    // Pas d'habitué en mode Rush
+    day_start_rush(&day, 5, 1);
+    CHECK(day.special_today == -1);
+    // L'avancement est sauvegardé
+    progress()->special_steps[2] = 2;
+    uint8_t buf[SAVE_SIZE];
+    Progress copy;
+    progress_serialize(progress(), buf);
+    CHECK(progress_deserialize(&copy, buf) && copy.special_steps[0] == 1 && copy.special_steps[2] == 2);
+}
+
 static void test_tween_fx(void)
 {
     CHECK(ease_in_quad(0) == 0 && ease_in_quad(256) == 256);
@@ -402,6 +475,7 @@ int main(void)
     test_objectives();
     test_rush();
     test_tween_fx();
+    test_specials();
     printf("%d vérifications, %d échec(s)\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

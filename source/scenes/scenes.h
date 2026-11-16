@@ -16,8 +16,12 @@ extern const Scene SCENE_OPTIONS;
 typedef struct {
     bool in_progress;   // une journée est en cours (retour du livre de recettes)
     Day day;
-    Drink drink;
+    Drink cups[2];      // deuxième gobelet avec l'amélioration (tâche 3.12)
+    int active_cup;
+    int cup_count;
 } ShopSession;
+
+static inline Drink *session_drink(ShopSession *s) { return &s->cups[s->active_cup]; }
 
 ShopSession *shop_session(void);
 

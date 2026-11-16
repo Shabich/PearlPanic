@@ -6,6 +6,7 @@
 #include "core/input.h"
 #include "game/progress.h"
 #include "game/recipes.h"
+#include "game/specials.h"
 #include "gen/assets.h"
 #include "gfx/font.h"
 #include "gfx/palette.h"
@@ -49,10 +50,22 @@ void shop_begin_rush(void)
 // Hauteur de la surface du liquide dans le gobelet (pour les éclaboussures)
 static int cup_surface_y(void)
 {
-    return CUP_BOT_Y - g_session.drink.liquid_total * (CUP_BOT_Y - CUP_TOP_Y) / CUP_CAPACITY;
+    return CUP_BOT_Y - session_drink(&g_session)->liquid_total * (CUP_BOT_Y - CUP_TOP_Y) / CUP_CAPACITY;
 }
 
 static int customer_head_x(int slot) { return slot_cx(slot); }
+
+// Centre du gobelet actif
+static int active_cx(void) { return cup_cx_of(g_session.active_cup, g_session.cup_count); }
+
+// Gobelet sous le stylet (-1 si aucun)
+static int cup_at(int x, int y)
+{
+    for (int i = 0; i < g_session.cup_count; i++)
+        if (rect_contains(cup_hit_rect(i, g_session.cup_count), x, y))
+            return i;
+    return -1;
+}
 #define CUSTOMER_HEAD_Y (CUSTOMER_Y + 14)
 
 static bool ing_unlocked(Ingredient ing)
@@ -92,7 +105,9 @@ static void shop_enter(void)
             day_start_rush(&g_session.day, progress()->day, plat_entropy());
         else
             day_start(&g_session.day, progress()->day, plat_entropy());
-        drink_reset(&g_session.drink);
+        drink_reset(&g_session.cups[0]);
+        drink_reset(&g_session.cups[1]);
+        g_session.active_cup = 0;
         g_session.in_progress = true;
         g_begin_requested = false;
         memset(&g_view, 0, sizeof(g_view));
@@ -113,6 +128,9 @@ static void shop_enter(void)
         }
     }
     layout_set_lefty(progress()->lefty);
+    g_session.cup_count = progress_has_upgrade(UPG_SECOND_CUP) ? 2 : 1;
+    if (g_session.active_cup >= g_session.cup_count)
+        g_session.active_cup = 0;
     plat_music(true);
     g_view.paused = false;
     g_view.pouring = -1;
@@ -132,13 +150,16 @@ static void shop_exit(void)
 
 // ----------------------------------------------------------------- Service
 
+static void handle_events(int first);
+
 static void serve(void)
 {
     Day *d = &g_session.day;
-    Drink *drink = &g_session.drink;
+    Drink *drink = session_drink(&g_session);
     if (drink_is_empty(drink))
         return;
     int slot = d->active;
+    int first_event = d->event_count;
     ServeResult r;
     if (!day_serve(d, drink, &r))
         return;
@@ -162,8 +183,11 @@ static void serve(void)
     g_view.coin_popup_timer = 60;
     g_view.coin_popup_slot = slot;
 
+    handle_events(first_event);   // annonces de l'habitué, déblocages
     char l1[48], l2[64];
-    if (r.unlocked >= 0) {
+    if (d->slots[slot].special >= 0 && d->special_result == 1) {
+        // le toast de l'habitué reste affiché
+    } else if (r.unlocked >= 0) {
         snprintf(l1, sizeof(l1), "Nouvelle recette !");
         snprintf(l2, sizeof(l2), "« %s » ajoutée au livre.", RECIPES[r.unlocked].name);
         toast(l1, l2, COL_LAV_DARK);
@@ -179,13 +203,13 @@ static void serve(void)
 
 static void update_shake(const Input *in)
 {
-    Drink *drink = &g_session.drink;
+    Drink *drink = session_drink(&g_session);
     if (!drink->sealed || drink->shaken || g_view.held != ING_NONE) {
         g_view.shaking = false;
         g_view.wobble = 0;
         return;
     }
-    if (in->touch_down && rect_contains(cup_rect(), in->x, in->y)) {
+    if (in->touch_down && rect_contains(cup_hit_rect(g_session.active_cup, g_session.cup_count), in->x, in->y)) {
         g_view.shaking = true;
         g_view.shake_dir = 0;
         g_view.shake_reversals = 0;
@@ -208,7 +232,7 @@ static void update_shake(const Input *in)
     }
     if (g_view.shake_reversals >= SHAKE_REVERSALS) {
         drink_shake(drink);
-        fx_emit(SCREEN_BOTTOM, FX_STAR, CUP_CX, CUP_TOP_Y, 6, 0);
+        fx_emit(SCREEN_BOTTOM, FX_STAR, active_cx(), CUP_TOP_Y, 6, 0);
         g_view.shaking = false;
         g_view.wobble = 0;
         toast("Bien secoué !", NULL, COL_MINT_DARK);
@@ -218,7 +242,7 @@ static void update_shake(const Input *in)
 static void update_station(const Input *in)
 {
     Day *d = &g_session.day;
-    Drink *drink = &g_session.drink;
+    Drink *drink = session_drink(&g_session);
 
     // Choix du client
     if (in->down & (BTN_L | BTN_LEFT))
@@ -233,6 +257,16 @@ static void update_station(const Input *in)
     if (input_pressed_in(rn.x, rn.y, rn.w, rn.h)) {
         day_select(d, +1);
         plat_sfx(SFX_CLICK);
+    }
+
+    // Deux gobelets : toucher un gobelet le rend actif (tâche 3.12)
+    if (g_session.cup_count == 2 && in->touch_down && g_view.held == ING_NONE) {
+        int c = cup_at(in->x, in->y);
+        if (c >= 0 && c != g_session.active_cup) {
+            g_session.active_cup = c;
+            drink = session_drink(&g_session);
+            plat_sfx(SFX_CLICK);
+        }
     }
 
     // Tireuses : maintenir pour verser
@@ -254,9 +288,9 @@ static void update_station(const Input *in)
             toast("Oups, ça déborde !", "Relâche le stylet plus tôt.", COL_BAD);
         uint16_t col = ing_info(TAP_INGS[pouring])->color;
         if (drink->overflowed && (g_view.frame & 3) == 0)
-            fx_emit(SCREEN_BOTTOM, FX_SPLASH, CUP_CX + ((g_view.frame & 4) ? 30 : -30), CUP_TOP_Y - 6, 1, col);
+            fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx() + ((g_view.frame & 4) ? 30 : -30), CUP_TOP_Y - 6, 1, col);
         else if ((g_view.frame & 7) == 0)
-            fx_emit(SCREEN_BOTTOM, FX_SPLASH, CUP_CX, cup_surface_y(), 1, col);
+            fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), cup_surface_y(), 1, col);
     } else {
         pouring = -1;
     }
@@ -273,7 +307,7 @@ static void update_station(const Input *in)
             if (drink_add(drink, PUMP_INGS[i])) {
                 g_view.pump_flash[i] = 8;
                 plat_sfx(SFX_PUMP);
-                fx_emit(SCREEN_BOTTOM, FX_SPLASH, CUP_CX, cup_surface_y(), 3, ing_info(PUMP_INGS[i])->color);
+                fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), cup_surface_y(), 3, ing_info(PUMP_INGS[i])->color);
             }
         }
     }
@@ -281,19 +315,24 @@ static void update_station(const Input *in)
     // Bacs de garnitures : glisser jusqu'au gobelet (ou toucher pour ajouter)
     for (int i = 0; i < BIN_COUNT; i++) {
         Rect r = bin_rect(i);
-        if (input_pressed_in(r.x, r.y, r.w, r.h) && ing_unlocked(BIN_INGS[i]) && !drink->sealed) {
+        bool any_open = !g_session.cups[0].sealed || (g_session.cup_count == 2 && !g_session.cups[1].sealed);
+        if (input_pressed_in(r.x, r.y, r.w, r.h) && ing_unlocked(BIN_INGS[i]) && any_open) {
             g_view.held = BIN_INGS[i];
             g_view.held_from = i;
         }
     }
     if (in->touch_up && g_view.held != ING_NONE) {
         Rect from = bin_rect(g_view.held_from);
-        bool dropped = rect_contains(cup_rect(), in->x, in->y);
+        int target = cup_at(in->x, in->y);
         bool tapped = in->tapped && rect_contains(from, in->start_x, in->start_y);
-        if ((dropped || tapped) && drink_add(drink, g_view.held)) {
+        if (target >= 0) {
+            g_session.active_cup = target;
+            drink = session_drink(&g_session);
+        }
+        if ((target >= 0 || tapped) && drink_add(drink, g_view.held)) {
             plat_sfx(SFX_PLOP);
             uint16_t col = drink->liquid_total ? drink_mixed_color(drink) : ing_info(g_view.held)->color;
-            fx_emit(SCREEN_BOTTOM, FX_SPLASH, CUP_CX, cup_surface_y(), 4, col);
+            fx_emit(SCREEN_BOTTOM, FX_SPLASH, active_cx(), cup_surface_y(), 4, col);
         }
         g_view.held = ING_NONE;
     }
@@ -305,7 +344,7 @@ static void update_station(const Input *in)
             continue;
         if (a == ACT_SEAL && drink_seal(drink)) {
             plat_sfx(SFX_SEAL);
-            fx_emit(SCREEN_BOTTOM, FX_SPARKLE, CUP_CX, CUP_TOP_Y - 8, 4, 0);
+            fx_emit(SCREEN_BOTTOM, FX_SPARKLE, active_cx(), CUP_TOP_Y - 8, 4, 0);
         }
         else if (a == ACT_TRASH && !drink_is_empty(drink)) {
             drink_reset(drink);
@@ -341,16 +380,36 @@ static void update_pause(const Input *in)
     }
 }
 
-static void handle_events(void)
+static void handle_events(int first)
 {
     Day *d = &g_session.day;
-    for (int i = 0; i < d->event_count; i++) {
+    for (int i = first; i < d->event_count; i++) {
         const DayEvent *e = &d->events[i];
         switch (e->type) {
-        case EV_ARRIVE:
+        case EV_ARRIVE: {
+            const Customer *c = &d->slots[e->slot];
             plat_sfx(SFX_BELL);
-            plat_voice(customer_type(d->slots[e->slot].type)->voice);
+            plat_voice(customer_type(c->type)->voice);
+            if (c->special >= 0) {
+                char l1[48];
+                snprintf(l1, sizeof(l1), "%s est là !", SPECIALS[c->special].name);
+                toast(l1, "Un habitué : soigne sa commande !", COL_WOOD_DARK);
+                fx_emit(SCREEN_TOP, FX_SPARKLE, customer_head_x(e->slot), CUSTOMER_HEAD_Y, 8, 0);
+            }
             break;
+        }
+        case EV_SPECIAL_DONE: {
+            const Customer *c = &d->slots[e->slot];
+            char l1[48];
+            if (e->value >= SPECIAL_VISITS)
+                snprintf(l1, sizeof(l1), "Histoire terminée : %s !", SPECIALS[c->special].name);
+            else
+                snprintf(l1, sizeof(l1), "%s reviendra bientôt…", SPECIALS[c->special].name);
+            toast(l1, c->says, COL_WOOD_DARK);
+            plat_sfx(SFX_UNLOCK);
+            fx_emit(SCREEN_TOP, FX_HEART, customer_head_x(e->slot), CUSTOMER_HEAD_Y, 8, 0);
+            break;
+        }
         case EV_STRESS_UP:
             if (e->value >= 2)
                 fx_emit(SCREEN_TOP, FX_SWEAT, customer_head_x(e->slot) + 14, CUSTOMER_HEAD_Y - 10, 2, 0);
@@ -405,7 +464,7 @@ static void shop_update(void)
             plat_pour_loop(false);
         } else {
             day_update(d);
-            handle_events();
+            handle_events(0);
             if (!d->ended)
                 update_station(in);
         }
@@ -452,7 +511,7 @@ static void shop_update(void)
     watch(SCREEN_BOTTOM, &w_sel, rect_make(SEL_X, SEL_Y, SEL_W, PUMP_H + 2), h);
 
     h = hash_add(hash_begin(), g_view.held);
-    h = hash_add(h, g_session.drink.sealed);
+    h = hash_add(h, session_drink(&g_session)->sealed);
     watch(SCREEN_BOTTOM, &w_bins, rect_make(col_left_x() - 4, ROW_Y0, COL_W + 8, SCREEN_H - ROW_Y0), h);
 
     h = hash_add(hash_begin(), shop_actions_hash(&g_view));

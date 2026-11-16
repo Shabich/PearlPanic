@@ -10,6 +10,7 @@ typedef enum {
     UPG_CUSHIONS,     // coussins doux : +25 % de patience
     UPG_GARLANDS,     // guirlandes : l'ambiance baisse 2x moins vite
     UPG_TIP_JAR,      // pot à pourboires : +1 pièce de pourboire
+    UPG_SECOND_CUP,   // deuxième gobelet sur le poste (tâche 3.12)
     UPG_COUNT
 } Upgrade;
 
@@ -27,6 +28,7 @@ typedef struct {
     uint32_t total_served;
     uint32_t best_day_coins;
     uint32_t best_rush;        // meilleur score du mode Rush (tâche 6.7)
+    uint8_t special_steps[4];  // avancement de l'histoire de chaque habitué (tâche 4.10)
     // Réglages (tâche 8.5), conservés quand on recommence une partie
     uint8_t music_volume;      // 0..4
     uint8_t sfx_volume;        // 0..4

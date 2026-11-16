@@ -20,6 +20,7 @@
 #define LEAVE_FRAMES     40
 #define MAX_EVENTS       8
 #define MAX_UNLOCKS      8
+#define SPECIAL_ARRIVAL  (15 * FPS)   // un habitué arrive après 15 s
 
 typedef enum {
     CS_EMPTY,
@@ -39,6 +40,7 @@ typedef struct {
     int16_t anim;         // frames passées dans l'état courant
     uint16_t seq;         // ordre d'arrivée
     int8_t last_score;    // -1 = pas servi
+    int8_t special;       // habitué (index SPECIALS), -1 sinon
     const char *says;     // réplique en partant (peut être NULL)
     char says_buf[48];
 } Customer;
@@ -50,6 +52,7 @@ typedef enum {
     EV_SERVED,
     EV_UNLOCK,
     EV_DAY_END,
+    EV_SPECIAL_DONE,      // visite d'un habitué réussie (value = étape atteinte)
 } DayEventType;
 
 typedef struct {
@@ -72,6 +75,9 @@ typedef struct Day {
     bool endless;         // mode Rush : pas d'horloge, finit quand l'ambiance tombe à 0
     Objective objective;  // objectif du jour (OBJ_NONE en mode Rush)
     bool objective_met;   // calculé en fin de journée
+    int8_t special_today; // habitué attendu aujourd'hui (-1 = aucun)
+    bool special_spawned;
+    int8_t special_result; // -1 pas encore venu, 0 raté, 1 réussi
     uint32_t frame;
     int32_t spawn_timer;
     int ambiance;

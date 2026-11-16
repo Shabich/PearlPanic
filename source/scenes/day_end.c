@@ -4,6 +4,7 @@
 #include "core/input.h"
 #include "game/progress.h"
 #include "game/recipes.h"
+#include "game/specials.h"
 #include "gen/assets.h"
 #include "gfx/font.h"
 #include "gfx/palette.h"
@@ -18,8 +19,12 @@ static bool g_collapsed;
 static bool g_rush;
 static bool g_new_record;
 
-static Rect upgrade_rect(int i) { return rect_make(8 + (i & 1) * 124, 26 + (i >> 1) * 52, 116, 46); }
-static Rect next_rect(void) { return rect_make(56, 136, 144, 28); }
+static Rect upgrade_rect(int i)
+{
+    int x = i == UPG_COUNT - 1 && (UPG_COUNT & 1) ? 70 : 8 + (i & 1) * 124;
+    return rect_make(x, 24 + (i >> 1) * 41, 116, 38);
+}
+static Rect next_rect(void) { return rect_make(56, 150, 144, 24); }
 
 static void draw_summary(Surface *s, const Day *d)
 {
@@ -27,9 +32,17 @@ static void draw_summary(Surface *s, const Day *d)
     ui_polka_background(s, COL_PINK_PALE, COL_WHITE);
     snprintf(buf, sizeof(buf), "Fin du jour %d", d->number);
     text_draw_shadow(s, (SCREEN_W - text_width(buf, 2)) / 2, 8, buf, COL_PINK_DARK, COL_WHITE, 2);
-    if (g_collapsed)
+    if (g_collapsed) {
         text_draw_aligned(s, 0, 30, SCREEN_W, "Ambiance effondrée : on réessaie !",
                           COL_BAD, ALIGN_CENTER);
+    } else if (d->special_today >= 0 && d->special_result >= 0) {
+        const char *name = SPECIALS[d->special_today].name;
+        if (d->special_result)
+            snprintf(buf, sizeof(buf), "Visite réussie : %s !", name);
+        else
+            snprintf(buf, sizeof(buf), "%s reviendra un autre jour…", name);
+        text_draw_aligned(s, 0, 30, SCREEN_W, buf, COL_WOOD_DARK, ALIGN_CENTER);
+    }
 
     draw_round_rect(s, 16, 44, 224, 100, COL_CREAM, COL_WOOD_DARK);
     int y = 50;
@@ -115,9 +128,9 @@ static void draw_shop(Surface *s)
         uint16_t fill = owned ? COL_MINT : g_flash_upgrade == i && g_flash_timer ? COL_PINK : COL_CREAM;
         draw_round_rect(s, r.x, r.y, r.w, r.h, fill, owned ? COL_MINT_DARK : COL_WOOD_DARK);
         text_draw(s, r.x + 4, r.y + 3, u->name, COL_INK, 1);
-        text_draw_wrapped(s, r.x + 4, r.y + 15, r.w - 8, u->desc, COL_INK_SOFT, ALIGN_LEFT);
+        text_draw_wrapped(s, r.x + 4, r.y + 14, r.w - 8, u->desc, COL_INK_SOFT, ALIGN_LEFT);
         if (owned) {
-            text_draw(s, r.x + 4, r.y + r.h - 13, "Acquis !", COL_MINT_DARK, 1);
+            text_draw(s, r.x + r.w - 4 - text_width("OK", 1), r.y + 3, "OK", COL_MINT_DARK, 1);
         } else {
             snprintf(buf, sizeof(buf), "%d", u->cost);
             int tw = text_width(buf, 1);
@@ -127,7 +140,7 @@ static void draw_shop(Surface *s)
     }
     snprintf(buf, sizeof(buf), g_collapsed ? "Réessayer le jour %d" : "Jour %d !", progress()->day);
     ui_button(s, next_rect(), buf, BTN_STYLE_PRIMARY);
-    text_draw_aligned(s, 0, 172, SCREEN_W, "Partie sauvegardée", COL_INK_SOFT, ALIGN_CENTER);
+    text_draw_aligned(s, 0, 179, SCREEN_W, "Partie sauvegardée", COL_INK_SOFT, ALIGN_CENTER);
 }
 
 static void day_end_enter(void)

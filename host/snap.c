@@ -119,7 +119,7 @@ int main(int argc, char **argv)
     snap("09_stress");
     for (int i = 0; i < 200 * FPS && shop_session()->in_progress; i++)
         frames(1);
-    frames(5);
+    frames(20);
     snap("10_day_end");
 
     // Jour suivant (ou réessai), pause, livre de recettes
@@ -160,6 +160,25 @@ int main(int argc, char **argv)
         frames(1);
     frames(20);
     snap("17_rush_end");
+
+    // Deux gobelets (amélioration) + habitué du jour 3
+    press(BTN_A);
+    frames(20);
+    progress()->upgrades |= 1u << UPG_SECOND_CUP;
+    progress()->day = 3;
+    press(BTN_START);                       // Continuer
+    frames(16 * FPS + ARRIVE_FRAMES);
+    center(tap_rect(0), &x, &y);
+    hold(x, y, 60);
+    center(bin_rect(0), &x, &y);
+    drag(x, y, cup_cx_of(0, 2), 140);
+    tap(cup_cx_of(1, 2), 150);              // sélectionne le 2e gobelet
+    center(tap_rect(4), &x, &y);
+    hold(x, y, 80);
+    center(pump_rect(1), &x, &y);
+    tap(x, y);
+    frames(4);
+    snap("18_two_cups_special");
     printf("captures écrites dans %s\n", g_dir);
     return 0;
 }
