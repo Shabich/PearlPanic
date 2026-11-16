@@ -156,13 +156,14 @@ void draw_image_flip(Surface *s, const Image *img, int x, int y, bool hflip)
     if (rect_empty(r))
         return;
     for (int j = 0; j < r.h; j++) {
-        const uint16_t *src = img->px + (r.y - y + j) * img->w;
+        const uint8_t *src = img->idx + (r.y - y + j) * img->w;
         uint16_t *dst = s->px + (r.y + j) * s->stride + r.x;
+        const uint16_t *pal = img->pal;
         for (int i = 0; i < r.w; i++) {
             int sx = r.x - x + i;
-            uint16_t p = src[hflip ? img->w - 1 - sx : sx];
+            uint8_t p = src[hflip ? img->w - 1 - sx : sx];
             if (p)
-                dst[i] = p;
+                dst[i] = pal[p];
         }
     }
 }
@@ -179,12 +180,12 @@ void draw_mask(Surface *s, const Image *mask, int x, int y, uint16_t color)
         return;
     uint16_t shadow = color_darken(color, 5);
     for (int j = 0; j < r.h; j++) {
-        const uint16_t *src = mask->px + (r.y - y + j) * mask->w + (r.x - x);
+        const uint8_t *src = mask->idx + (r.y - y + j) * mask->w + (r.x - x);
         uint16_t *dst = s->px + (r.y + j) * s->stride + r.x;
         for (int i = 0; i < r.w; i++) {
-            uint16_t p = src[i];
+            uint8_t p = src[i];
             if (p)
-                dst[i] = (p & 31) > 20 ? color : shadow;
+                dst[i] = (mask->pal[p] & 31) > 20 ? color : shadow;
         }
     }
 }

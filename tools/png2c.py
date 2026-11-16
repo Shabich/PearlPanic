@@ -29,13 +29,26 @@ def convert_images():
         img = Image.open(p).convert("RGBA")
         w, hgt = img.size
         raw = img.tobytes()
-        px = [0 if raw[i + 3] < 128 else rgb15(raw[i], raw[i + 1], raw[i + 2])
-              for i in range(0, len(raw), 4)]
+        # Palette propre à l'image : index 0 = transparent
+        palette, lookup, idx = [0], {}, []
+        for i in range(0, len(raw), 4):
+            if raw[i + 3] < 128:
+                idx.append(0)
+                continue
+            col = rgb15(raw[i], raw[i + 1], raw[i + 2])
+            if col not in lookup:
+                if len(palette) >= 256:
+                    raise SystemExit(f"{p}: plus de 255 couleurs")
+                lookup[col] = len(palette)
+                palette.append(col)
+            idx.append(lookup[col])
         rows = []
-        for i in range(0, len(px), 16):
-            rows.append("    " + ", ".join(f"0x{v:04X}" for v in px[i:i + 16]) + ",")
-        c.append(f"\nstatic const uint16_t {name}_px[{len(px)}] = {{\n" + "\n".join(rows) + "\n};\n")
-        c.append(f"const Image {name} = {{ {w}, {hgt}, {name}_px }};\n")
+        for i in range(0, len(idx), 32):
+            rows.append("    " + ",".join(str(v) for v in idx[i:i + 32]) + ",")
+        c.append(f"\nstatic const uint8_t {name}_idx[{len(idx)}] = {{\n" + "\n".join(rows) + "\n};\n")
+        c.append(f"static const uint16_t {name}_pal[{len(palette)}] = {{ "
+                 + ", ".join(f"0x{v:04X}" for v in palette) + " };\n")
+        c.append(f"const Image {name} = {{ {w}, {hgt}, {name}_idx, {name}_pal }};\n")
         h.append(f"extern const Image {name};\n")
     h.append("\n#endif\n")
     (GEN / "assets.c").write_text("".join(c))

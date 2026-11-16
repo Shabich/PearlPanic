@@ -29,9 +29,12 @@ typedef struct {
     Rect clip;
 } Surface;
 
+// Image en couleurs indexées (8 bits par pixel) : moitié moins de mémoire
+// qu'en RGB15. L'index 0 est transparent.
 typedef struct {
     int w, h;
-    const uint16_t *px;   // 0 = transparent
+    const uint8_t *idx;
+    const uint16_t *pal;
 } Image;
 
 static inline Rect rect_make(int x, int y, int w, int h)
